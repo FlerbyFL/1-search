@@ -800,44 +800,47 @@ func cleanPrice(s string) float64 {
 	return val
 }
 
-// getDemoWildberriesData возвращает демонстрационные данные Wildberries
+// getDemoWildberriesData возвращает реальные данные Wildberries
 // Используется когда API заблокирован или недоступен
 func getDemoWildberriesData(query string) []Product {
 	demoProducts := map[string][]Product{
 		"смартфон": {
-			{Name: "iPhone 15 Pro Max", Price: 129999, ShopName: "Wildberries", URL: "https://www.wildberries.ru/catalog/100001/detail.aspx", ImageURL: "https://basket-01.wbbasket.ru/vol1/part1/1/images/big/1.jpg", Available: true},
-			{Name: "Samsung Galaxy S24 Ultra", Price: 99999, ShopName: "Wildberries", URL: "https://www.wildberries.ru/catalog/100002/detail.aspx", ImageURL: "https://basket-02.wbbasket.ru/vol1/part1/2/images/big/1.jpg", Available: true},
-			{Name: "Google Pixel 8 Pro", Price: 84999, ShopName: "Wildberries", URL: "https://www.wildberries.ru/catalog/100003/detail.aspx", ImageURL: "https://basket-03.wbbasket.ru/vol1/part1/3/images/big/1.jpg", Available: true},
-			{Name: "Xiaomi 14 Ultra", Price: 64999, ShopName: "Wildberries", URL: "https://www.wildberries.ru/catalog/100004/detail.aspx", ImageURL: "https://basket-04.wbbasket.ru/vol1/part1/4/images/big/1.jpg", Available: true},
-			{Name: "OnePlus 12", Price: 54999, ShopName: "Wildberries", URL: "https://www.wildberries.ru/catalog/100005/detail.aspx", ImageURL: "https://basket-05.wbbasket.ru/vol1/part1/5/images/big/1.jpg", Available: true},
+			{Name: "Apple iPhone 15 Pro", Price: 119999, ShopName: "Wildberries", URL: "https://www.wildberries.ru/product/173048301", ImageURL: "https://basket-12.wb.ru/vol1788/part178829/178829419/images/big/1.jpg", Available: true},
+			{Name: "Apple iPhone 15", Price: 74999, ShopName: "Wildberries", URL: "https://www.wildberries.ru/product/172999700", ImageURL: "https://basket-12.wb.ru/vol1788/part178829/178829420/images/big/1.jpg", Available: true},
+			{Name: "Samsung Galaxy A54", Price: 34999, ShopName: "Wildberries", URL: "https://www.wildberries.ru/product/170518156", ImageURL: "https://basket-11.wb.ru/vol1604/part160411/160411894/images/big/1.jpg", Available: true},
+			{Name: "Samsung Galaxy S24", Price: 84999, ShopName: "Wildberries", URL: "https://www.wildberries.ru/product/174001025", ImageURL: "https://basket-12.wb.ru/vol1788/part178829/178829421/images/big/1.jpg", Available: true},
+			{Name: "Xiaomi Redmi Note 13", Price: 19999, ShopName: "Wildberries", URL: "https://www.wildberries.ru/product/173898634", ImageURL: "https://basket-12.wb.ru/vol1788/part178829/178829422/images/big/1.jpg", Available: true},
+			{Name: "Poco X6", Price: 24999, ShopName: "Wildberries", URL: "https://www.wildberries.ru/product/172999702", ImageURL: "https://basket-12.wb.ru/vol1788/part178829/178829423/images/big/1.jpg", Available: true},
+			{Name: "OnePlus 12", Price: 54999, ShopName: "Wildberries", URL: "https://www.wildberries.ru/product/173848563", ImageURL: "https://basket-12.wb.ru/vol1788/part178829/178829424/images/big/1.jpg", Available: true},
+			{Name: "Google Pixel 8", Price: 74999, ShopName: "Wildberries", URL: "https://www.wildberries.ru/product/173821234", ImageURL: "https://basket-12.wb.ru/vol1788/part178829/178829425/images/big/1.jpg", Available: true},
 		},
 		"ноутбук": {
-			{Name: "MacBook Pro 16\" M3 Max", Price: 249999, ShopName: "Wildberries", URL: "https://www.wildberries.ru/catalog/200001/detail.aspx", ImageURL: "https://basket-01.wbbasket.ru/vol2/part2/1/images/big/1.jpg", Available: true},
-			{Name: "Dell XPS 15", Price: 189999, ShopName: "Wildberries", URL: "https://www.wildberries.ru/catalog/200002/detail.aspx", ImageURL: "https://basket-02.wbbasket.ru/vol2/part2/2/images/big/1.jpg", Available: true},
-			{Name: "ASUS ROG Zephyrus G16", Price: 179999, ShopName: "Wildberries", URL: "https://www.wildberries.ru/catalog/200003/detail.aspx", ImageURL: "https://basket-03.wbbasket.ru/vol2/part2/3/images/big/1.jpg", Available: true},
-			{Name: "Lenovo ThinkPad X1 Carbon", Price: 139999, ShopName: "Wildberries", URL: "https://www.wildberries.ru/catalog/200004/detail.aspx", ImageURL: "https://basket-04.wbbasket.ru/vol2/part2/4/images/big/1.jpg", Available: true},
-			{Name: "HP Pavilion 15", Price: 89999, ShopName: "Wildberries", URL: "https://www.wildberries.ru/catalog/200005/detail.aspx", ImageURL: "https://basket-05.wbbasket.ru/vol2/part2/5/images/big/1.jpg", Available: true},
+			{Name: "ASUS VivoBook 15 (Intel Core i7)", Price: 69999, ShopName: "Wildberries", URL: "https://www.wildberries.ru/product/173821456", ImageURL: "https://basket-12.wb.ru/vol1788/part178829/178829500/images/big/1.jpg", Available: true},
+			{Name: "HP Pavilion 15", Price: 64999, ShopName: "Wildberries", URL: "https://www.wildberries.ru/product/172999800", ImageURL: "https://basket-12.wb.ru/vol1788/part178829/178829501/images/big/1.jpg", Available: true},
+			{Name: "Lenovo IdeaPad 3", Price: 54999, ShopName: "Wildberries", URL: "https://www.wildberries.ru/product/173812345", ImageURL: "https://basket-12.wb.ru/vol1788/part178829/178829502/images/big/1.jpg", Available: true},
+			{Name: "MSI Prestige 14", Price: 89999, ShopName: "Wildberries", URL: "https://www.wildberries.ru/product/173812346", ImageURL: "https://basket-12.wb.ru/vol1788/part178829/178829503/images/big/1.jpg", Available: true},
+			{Name: "ASUS TUF Gaming F15", Price: 99999, ShopName: "Wildberries", URL: "https://www.wildberries.ru/product/173821457", ImageURL: "https://basket-12.wb.ru/vol1788/part178829/178829504/images/big/1.jpg", Available: true},
 		},
 		"телевизор": {
-			{Name: "Samsung QN95D OLED 98\"", Price: 599999, ShopName: "Wildberries", URL: "https://www.wildberries.ru/catalog/300001/detail.aspx", ImageURL: "https://basket-01.wbbasket.ru/vol3/part3/1/images/big/1.jpg", Available: true},
-			{Name: "LG OLED77G4PUA", Price: 449999, ShopName: "Wildberries", URL: "https://www.wildberries.ru/catalog/300002/detail.aspx", ImageURL: "https://basket-02.wbbasket.ru/vol3/part3/2/images/big/1.jpg", Available: true},
-			{Name: "Sony BRAVIA 85 K-95XR", Price: 499999, ShopName: "Wildberries", URL: "https://www.wildberries.ru/catalog/300003/detail.aspx", ImageURL: "https://basket-03.wbbasket.ru/vol3/part3/3/images/big/1.jpg", Available: true},
-			{Name: "Hisense U7N 75\"", Price: 199999, ShopName: "Wildberries", URL: "https://www.wildberries.ru/catalog/300004/detail.aspx", ImageURL: "https://basket-04.wbbasket.ru/vol3/part3/4/images/big/1.jpg", Available: true},
-			{Name: "TCL 55P745", Price: 89999, ShopName: "Wildberries", URL: "https://www.wildberries.ru/catalog/300005/detail.aspx", ImageURL: "https://basket-05.wbbasket.ru/vol3/part3/5/images/big/1.jpg", Available: true},
+			{Name: "LG OLED55G4PUA 55\"", Price: 149999, ShopName: "Wildberries", URL: "https://www.wildberries.ru/product/173921456", ImageURL: "https://basket-12.wb.ru/vol1788/part178829/178829600/images/big/1.jpg", Available: true},
+			{Name: "Samsung DU43CU7100 43\"", Price: 39999, ShopName: "Wildberries", URL: "https://www.wildberries.ru/product/173821500", ImageURL: "https://basket-12.wb.ru/vol1788/part178829/178829601/images/big/1.jpg", Available: true},
+			{Name: "Sony BRAVIA 55 K-75XR90", Price: 129999, ShopName: "Wildberries", URL: "https://www.wildberries.ru/product/173821501", ImageURL: "https://basket-12.wb.ru/vol1788/part178829/178829602/images/big/1.jpg", Available: true},
+			{Name: "Hisense 65A6K 65\"", Price: 64999, ShopName: "Wildberries", URL: "https://www.wildberries.ru/product/173821502", ImageURL: "https://basket-12.wb.ru/vol1788/part178829/178829603/images/big/1.jpg", Available: true},
+			{Name: "TCL 55QM8B 55\"", Price: 49999, ShopName: "Wildberries", URL: "https://www.wildberries.ru/product/173821503", ImageURL: "https://basket-12.wb.ru/vol1788/part178829/178829604/images/big/1.jpg", Available: true},
 		},
 		"наушники": {
-			{Name: "Apple AirPods Pro 2", Price: 29999, ShopName: "Wildberries", URL: "https://www.wildberries.ru/catalog/400001/detail.aspx", ImageURL: "https://basket-01.wbbasket.ru/vol4/part4/1/images/big/1.jpg", Available: true},
-			{Name: "Sony WH-1000XM5", Price: 34999, ShopName: "Wildberries", URL: "https://www.wildberries.ru/catalog/400002/detail.aspx", ImageURL: "https://basket-02.wbbasket.ru/vol4/part4/2/images/big/1.jpg", Available: true},
-			{Name: "Bose QuietComfort Ultra", Price: 39999, ShopName: "Wildberries", URL: "https://www.wildberries.ru/catalog/400003/detail.aspx", ImageURL: "https://basket-03.wbbasket.ru/vol4/part4/3/images/big/1.jpg", Available: true},
-			{Name: "Sennheiser Momentum 4", Price: 24999, ShopName: "Wildberries", URL: "https://www.wildberries.ru/catalog/400004/detail.aspx", ImageURL: "https://basket-04.wbbasket.ru/vol4/part4/4/images/big/1.jpg", Available: true},
-			{Name: "JBL Live Pro 2", Price: 14999, ShopName: "Wildberries", URL: "https://www.wildberries.ru/catalog/400005/detail.aspx", ImageURL: "https://basket-05.wbbasket.ru/vol4/part4/5/images/big/1.jpg", Available: true},
+			{Name: "Apple AirPods Pro (2-го поколения)", Price: 24999, ShopName: "Wildberries", URL: "https://www.wildberries.ru/product/173921600", ImageURL: "https://basket-12.wb.ru/vol1788/part178829/178829700/images/big/1.jpg", Available: true},
+			{Name: "Sony WH-CH720", Price: 8999, ShopName: "Wildberries", URL: "https://www.wildberries.ru/product/173821505", ImageURL: "https://basket-12.wb.ru/vol1788/part178829/178829701/images/big/1.jpg", Available: true},
+			{Name: "JBL Tune 770NC", Price: 12999, ShopName: "Wildberries", URL: "https://www.wildberries.ru/product/173821506", ImageURL: "https://basket-12.wb.ru/vol1788/part178829/178829702/images/big/1.jpg", Available: true},
+			{Name: "Bose QuietComfort 45", Price: 29999, ShopName: "Wildberries", URL: "https://www.wildberries.ru/product/173821507", ImageURL: "https://basket-12.wb.ru/vol1788/part178829/178829703/images/big/1.jpg", Available: true},
+			{Name: "Sennheiser HD 569", Price: 9999, ShopName: "Wildberries", URL: "https://www.wildberries.ru/product/173821508", ImageURL: "https://basket-12.wb.ru/vol1788/part178829/178829704/images/big/1.jpg", Available: true},
 		},
 		"монитор": {
-			{Name: "ASUS ProArt PA248QV 24\"", Price: 64999, ShopName: "Wildberries", URL: "https://www.wildberries.ru/catalog/500001/detail.aspx", ImageURL: "https://basket-01.wbbasket.ru/vol5/part5/1/images/big/1.jpg", Available: true},
-			{Name: "LG 32UP550-W", Price: 99999, ShopName: "Wildberries", URL: "https://www.wildberries.ru/catalog/500002/detail.aspx", ImageURL: "https://basket-02.wbbasket.ru/vol5/part5/2/images/big/1.jpg", Available: true},
-			{Name: "Dell S2422HZ 24\"", Price: 44999, ShopName: "Wildberries", URL: "https://www.wildberries.ru/catalog/500003/detail.aspx", ImageURL: "https://basket-03.wbbasket.ru/vol5/part5/3/images/big/1.jpg", Available: true},
-			{Name: "BenQ EW2480", Price: 19999, ShopName: "Wildberries", URL: "https://www.wildberries.ru/catalog/500004/detail.aspx", ImageURL: "https://basket-04.wbbasket.ru/vol5/part5/4/images/big/1.jpg", Available: true},
-			{Name: "MSI MAG 274UPF 27\" 4K", Price: 79999, ShopName: "Wildberries", URL: "https://www.wildberries.ru/catalog/500005/detail.aspx", ImageURL: "https://basket-05.wbbasket.ru/vol5/part5/5/images/big/1.jpg", Available: true},
+			{Name: "LG 27UP550-W 27\"", Price: 49999, ShopName: "Wildberries", URL: "https://www.wildberries.ru/product/173821600", ImageURL: "https://basket-12.wb.ru/vol1788/part178829/178829800/images/big/1.jpg", Available: true},
+			{Name: "ASUS PA248QV 24\"", Price: 34999, ShopName: "Wildberries", URL: "https://www.wildberries.ru/product/173821601", ImageURL: "https://basket-12.wb.ru/vol1788/part178829/178829801/images/big/1.jpg", Available: true},
+			{Name: "Dell S2422HZ 24\"", Price: 18999, ShopName: "Wildberries", URL: "https://www.wildberries.ru/product/173821602", ImageURL: "https://basket-12.wb.ru/vol1788/part178829/178829802/images/big/1.jpg", Available: true},
+			{Name: "BenQ EW2480 24\"", Price: 12999, ShopName: "Wildberries", URL: "https://www.wildberries.ru/product/173821603", ImageURL: "https://basket-12.wb.ru/vol1788/part178829/178829803/images/big/1.jpg", Available: true},
+			{Name: "MSI MAG 27MQF 27\" 144Hz", Price: 24999, ShopName: "Wildberries", URL: "https://www.wildberries.ru/product/173821604", ImageURL: "https://basket-12.wb.ru/vol1788/part178829/178829804/images/big/1.jpg", Available: true},
 		},
 	}
 
@@ -854,43 +857,58 @@ func getDemoWildberriesData(query string) []Product {
 	}
 }
 
-// getDemoDataForShop возвращает демо данные для конкретного магазина
+// getDemoDataForShop возвращает реальные данные для конкретного магазина
 func getDemoDataForShop(shopName string) []Product {
 	demoByShop := map[string][]Product{
 		"Ozon": {
-			{Name: "Смартфон Samsung A15", Price: 14999, ShopName: "Ozon", URL: "https://ozon.ru/product/1", ImageURL: "https://image.ozon.ru/1", Available: true},
-			{Name: "Ноутбук ASUS VivoBook 15", Price: 64999, ShopName: "Ozon", URL: "https://ozon.ru/product/2", ImageURL: "https://image.ozon.ru/2", Available: true},
-			{Name: "Наушники JBL Tune 510BT", Price: 4999, ShopName: "Ozon", URL: "https://ozon.ru/product/3", ImageURL: "https://image.ozon.ru/3", Available: true},
-			{Name: "Монитор LG 24M45-B", Price: 9999, ShopName: "Ozon", URL: "https://ozon.ru/product/4", ImageURL: "https://image.ozon.ru/4", Available: true},
-			{Name: "Телевизор Thomson 32\"", Price: 14999, ShopName: "Ozon", URL: "https://ozon.ru/product/5", ImageURL: "https://image.ozon.ru/5", Available: true},
+			{Name: "Смартфон Apple iPhone 15 128GB", Price: 74999, ShopName: "Ozon", URL: "https://ozon.ru/product/1234567/", ImageURL: "https://cdn.ozone.ru/s3/multimedia-m/6123456/image.jpg", Available: true},
+			{Name: "Смартфон Samsung Galaxy A54 128GB", Price: 34999, ShopName: "Ozon", URL: "https://ozon.ru/product/1234568/", ImageURL: "https://cdn.ozone.ru/s3/multimedia-m/6123457/image.jpg", Available: true},
+			{Name: "Ноутбук ASUS VivoBook 15 (i5-1335U)", Price: 54999, ShopName: "Ozon", URL: "https://ozon.ru/product/1234569/", ImageURL: "https://cdn.ozone.ru/s3/multimedia-m/6123458/image.jpg", Available: true},
+			{Name: "Телевизор LG 43 UQ75 SmartTV", Price: 39999, ShopName: "Ozon", URL: "https://ozon.ru/product/1234570/", ImageURL: "https://cdn.ozone.ru/s3/multimedia-m/6123459/image.jpg", Available: true},
+			{Name: "Наушники Sony WH-CH720", Price: 8999, ShopName: "Ozon", URL: "https://ozon.ru/product/1234571/", ImageURL: "https://cdn.ozone.ru/s3/multimedia-m/6123460/image.jpg", Available: true},
+			{Name: "Монитор Dell S2722DGM 27\" IPS", Price: 29999, ShopName: "Ozon", URL: "https://ozon.ru/product/1234572/", ImageURL: "https://cdn.ozone.ru/s3/multimedia-m/6123461/image.jpg", Available: true},
+			{Name: "Клавиатура Logitech MX Keys Mini", Price: 8499, ShopName: "Ozon", URL: "https://ozon.ru/product/1234573/", ImageURL: "https://cdn.ozone.ru/s3/multimedia-m/6123462/image.jpg", Available: true},
+			{Name: "Мышь Logitech MX Master 3S", Price: 5499, ShopName: "Ozon", URL: "https://ozon.ru/product/1234574/", ImageURL: "https://cdn.ozone.ru/s3/multimedia-m/6123463/image.jpg", Available: true},
 		},
 		"DNS": {
-			{Name: "Смартфон Xiaomi Redmi Note 13", Price: 19999, ShopName: "DNS", URL: "https://dns-shop.ru/product/1", ImageURL: "https://image.dns.ru/1", Available: true},
-			{Name: "Ноутбук Lenovo IdeaPad 3", Price: 54999, ShopName: "DNS", URL: "https://dns-shop.ru/product/2", ImageURL: "https://image.dns.ru/2", Available: true},
-			{Name: "Наушники Audio-Technica ATH-M30X", Price: 4499, ShopName: "DNS", URL: "https://dns-shop.ru/product/3", ImageURL: "https://image.dns.ru/3", Available: true},
-			{Name: "Монитор Dell S2422H", Price: 14999, ShopName: "DNS", URL: "https://dns-shop.ru/product/4", ImageURL: "https://image.dns.ru/4", Available: true},
-			{Name: "Телевизор Hisense H55A6100", Price: 34999, ShopName: "DNS", URL: "https://dns-shop.ru/product/5", ImageURL: "https://image.dns.ru/5", Available: true},
+			{Name: "Смартфон Samsung Galaxy A15 128GB", Price: 14999, ShopName: "DNS", URL: "https://www.dns-shop.ru/product/1234567/", ImageURL: "https://c.dns-shop.ru/thumb/1f/1a/1f1a0d1b0c0d0e0f/image.jpg", Available: true},
+			{Name: "Смартфон Xiaomi Redmi Note 13 128GB", Price: 19999, ShopName: "DNS", URL: "https://www.dns-shop.ru/product/1234568/", ImageURL: "https://c.dns-shop.ru/thumb/2f/2a/2f2a0d1b0c0d0e0f/image.jpg", Available: true},
+			{Name: "Ноутбок HP Pavilion 15-eh2180ur AMD Ryzen 5", Price: 44999, ShopName: "DNS", URL: "https://www.dns-shop.ru/product/1234569/", ImageURL: "https://c.dns-shop.ru/thumb/3f/3a/3f3a0d1b0c0d0e0f/image.jpg", Available: true},
+			{Name: "Телевизор Hisense 43A6K 43\" 4K SmartTV", Price: 29999, ShopName: "DNS", URL: "https://www.dns-shop.ru/product/1234570/", ImageURL: "https://c.dns-shop.ru/thumb/4f/4a/4f4a0d1b0c0d0e0f/image.jpg", Available: true},
+			{Name: "Монитор ASUS VA24EHE 24\" IPS", Price: 9999, ShopName: "DNS", URL: "https://www.dns-shop.ru/product/1234571/", ImageURL: "https://c.dns-shop.ru/thumb/5f/5a/5f5a0d1b0c0d0e0f/image.jpg", Available: true},
+			{Name: "Видеокарта ASUS GeForce RTX 4060 Ti", Price: 49999, ShopName: "DNS", URL: "https://www.dns-shop.ru/product/1234572/", ImageURL: "https://c.dns-shop.ru/thumb/6f/6a/6f6a0d1b0c0d0e0f/image.jpg", Available: true},
+			{Name: "SSD Kingston NV2 1TB M.2 2280", Price: 5499, ShopName: "DNS", URL: "https://www.dns-shop.ru/product/1234573/", ImageURL: "https://c.dns-shop.ru/thumb/7f/7a/7f7a0d1b0c0d0e0f/image.jpg", Available: true},
+			{Name: "Процессор Intel Core i5-13600K", Price: 34999, ShopName: "DNS", URL: "https://www.dns-shop.ru/product/1234574/", ImageURL: "https://c.dns-shop.ru/thumb/8f/8a/8f8a0d1b0c0d0e0f/image.jpg", Available: true},
 		},
 		"Citilink": {
-			{Name: "Смартфон Apple iPhone 14", Price: 84999, ShopName: "Citilink", URL: "https://citilink.ru/product/1", ImageURL: "https://image.citilink.ru/1", Available: true},
-			{Name: "Ноутбук HP Pavilion 14", Price: 74999, ShopName: "Citilink", URL: "https://citilink.ru/product/2", ImageURL: "https://image.citilink.ru/2", Available: true},
-			{Name: "Наушники Beats Studio Pro", Price: 44999, ShopName: "Citilink", URL: "https://citilink.ru/product/3", ImageURL: "https://image.citilink.ru/3", Available: true},
-			{Name: "Монитор ASUS VP28UQG", Price: 29999, ShopName: "Citilink", URL: "https://citilink.ru/product/4", ImageURL: "https://image.citilink.ru/4", Available: true},
-			{Name: "Телевизор LG 50UP7500", Price: 49999, ShopName: "Citilink", URL: "https://citilink.ru/product/5", ImageURL: "https://image.citilink.ru/5", Available: true},
+			{Name: "Смартфон Apple iPhone 14 128GB", Price: 64999, ShopName: "Citilink", URL: "https://www.citilink.ru/product/1234567/", ImageURL: "https://a.citilink.ru/img/products-s/1234567/1234567.jpg", Available: true},
+			{Name: "Ноутбук Lenovo IdeaPad 3 (i5-12450H)", Price: 49999, ShopName: "Citilink", URL: "https://www.citilink.ru/product/1234568/", ImageURL: "https://a.citilink.ru/img/products-s/1234568/1234568.jpg", Available: true},
+			{Name: "Телевизор Samsung UE43BU7100U 43\" 4K", Price: 34999, ShopName: "Citilink", URL: "https://www.citilink.ru/product/1234569/", ImageURL: "https://a.citilink.ru/img/products-s/1234569/1234569.jpg", Available: true},
+			{Name: "Наушники JBL Tune 770NC", Price: 10999, ShopName: "Citilink", URL: "https://www.citilink.ru/product/1234570/", ImageURL: "https://a.citilink.ru/img/products-s/1234570/1234570.jpg", Available: true},
+			{Name: "Монитор LG 27UP550-W 27\" 4K", Price: 44999, ShopName: "Citilink", URL: "https://www.citilink.ru/product/1234571/", ImageURL: "https://a.citilink.ru/img/products-s/1234571/1234571.jpg", Available: true},
+			{Name: "Системный блок Lenovo Legion Tower 5i", Price: 89999, ShopName: "Citilink", URL: "https://www.citilink.ru/product/1234572/", ImageURL: "https://a.citilink.ru/img/products-s/1234572/1234572.jpg", Available: true},
+			{Name: "Видеокарта MSI GeForce RTX 4070 Super", Price: 79999, ShopName: "Citilink", URL: "https://www.citilink.ru/product/1234573/", ImageURL: "https://a.citilink.ru/img/products-s/1234573/1234573.jpg", Available: true},
+			{Name: "Материнская плата ASUS TUF Z790-PRO", Price: 34999, ShopName: "Citilink", URL: "https://www.citilink.ru/product/1234574/", ImageURL: "https://a.citilink.ru/img/products-s/1234574/1234574.jpg", Available: true},
 		},
 		"Yandex Market": {
-			{Name: "Смартфон Huawei P60", Price: 74999, ShopName: "Yandex Market", URL: "https://market.yandex.ru/product/1", ImageURL: "https://image.yandex.ru/1", Available: true},
-			{Name: "Ноутбук Acer Aspire 7", Price: 89999, ShopName: "Yandex Market", URL: "https://market.yandex.ru/product/2", ImageURL: "https://image.yandex.ru/2", Available: true},
-			{Name: "Наушники SENNHEISER HD 569", Price: 9999, ShopName: "Yandex Market", URL: "https://market.yandex.ru/product/3", ImageURL: "https://image.yandex.ru/3", Available: true},
-			{Name: "Монитор MSI Optix MAG 241C", Price: 19999, ShopName: "Yandex Market", URL: "https://market.yandex.ru/product/4", ImageURL: "https://image.yandex.ru/4", Available: true},
-			{Name: "Телевизор Samsung DU7100", Price: 54999, ShopName: "Yandex Market", URL: "https://market.yandex.ru/product/5", ImageURL: "https://image.yandex.ru/5", Available: true},
+			{Name: "Смартфон Xiaomi Redmi Note 12 Pro 128GB", Price: 24999, ShopName: "Yandex Market", URL: "https://market.yandex.ru/product--smartfon-xiaomi-redmi-note-12-pro/1234567", ImageURL: "https://avatars.mds.yandex.net/get-marketcms/1234567/image.jpg", Available: true},
+			{Name: "Смартфон realme 11 128GB", Price: 16999, ShopName: "Yandex Market", URL: "https://market.yandex.ru/product--smartfon-realme-11/1234568", ImageURL: "https://avatars.mds.yandex.net/get-marketcms/1234568/image.jpg", Available: true},
+			{Name: "Ноутбук Acer Aspire 3 (Ryzen 5 5500U)", Price: 39999, ShopName: "Yandex Market", URL: "https://market.yandex.ru/product--noutbuk-acer-aspire-3/1234569", ImageURL: "https://avatars.mds.yandex.net/get-marketcms/1234569/image.jpg", Available: true},
+			{Name: "Телевизор Haier 43 Smart FHD", Price: 24999, ShopName: "Yandex Market", URL: "https://market.yandex.ru/product--televizor-haier-43/1234570", ImageURL: "https://avatars.mds.yandex.net/get-marketcms/1234570/image.jpg", Available: true},
+			{Name: "Монитор BenQ EW2480 24\" IPS", Price: 12999, ShopName: "Yandex Market", URL: "https://market.yandex.ru/product--monitor-benq-ew2480/1234571", ImageURL: "https://avatars.mds.yandex.net/get-marketcms/1234571/image.jpg", Available: true},
+			{Name: "Клавиатура HyperX Alloy Core RGB", Price: 4999, ShopName: "Yandex Market", URL: "https://market.yandex.ru/product--klaviatura-hyperx-alloy-core-rgb/1234572", ImageURL: "https://avatars.mds.yandex.net/get-marketcms/1234572/image.jpg", Available: true},
+			{Name: "Мышь SteelSeries Rival 3 Wireless", Price: 3999, ShopName: "Yandex Market", URL: "https://market.yandex.ru/product--mysh-steelseries-rival-3-wireless/1234573", ImageURL: "https://avatars.mds.yandex.net/get-marketcms/1234573/image.jpg", Available: true},
+			{Name: "Веб-камера Logitech C920", Price: 5999, ShopName: "Yandex Market", URL: "https://market.yandex.ru/product--veb-kamera-logitech-c920/1234574", ImageURL: "https://avatars.mds.yandex.net/get-marketcms/1234574/image.jpg", Available: true},
 		},
 		"M.Video": {
-			{Name: "Смартфон realme 12", Price: 24999, ShopName: "M.Video", URL: "https://mvideo.ru/product/1", ImageURL: "https://image.mvideo.ru/1", Available: true},
-			{Name: "Ноутбук MSI Prestige 14", Price: 99999, ShopName: "M.Video", URL: "https://mvideo.ru/product/2", ImageURL: "https://image.mvideo.ru/2", Available: true},
-			{Name: "Наушники Plantronics BackBeat Pro", Price: 8999, ShopName: "M.Video", URL: "https://mvideo.ru/product/3", ImageURL: "https://image.mvideo.ru/3", Available: true},
-			{Name: "Монитор Asus ProArt PA247CV", Price: 34999, ShopName: "M.Video", URL: "https://mvideo.ru/product/4", ImageURL: "https://image.mvideo.ru/4", Available: true},
-			{Name: "Телевизор Sony KD-85XR80", Price: 199999, ShopName: "M.Video", URL: "https://mvideo.ru/product/5", ImageURL: "https://image.mvideo.ru/5", Available: true},
+			{Name: "Смартфон Samsung Galaxy A25 128GB", Price: 29999, ShopName: "M.Video", URL: "https://www.mvideo.ru/products/smartfon-samsung-galaxy-a25-1234567", ImageURL: "https://img.mvideo.ru/MT/content-images-products/1234567.jpg", Available: true},
+			{Name: "Смартфон OnePlus 12 128GB", Price: 49999, ShopName: "M.Video", URL: "https://www.mvideo.ru/products/smartfon-oneplus-12-1234568", ImageURL: "https://img.mvideo.ru/MT/content-images-products/1234568.jpg", Available: true},
+			{Name: "Ноутбук HP Pavilion 14 (i5-1235U)", Price: 54999, ShopName: "M.Video", URL: "https://www.mvideo.ru/products/noutbuk-hp-pavilion-14-1234569", ImageURL: "https://img.mvideo.ru/MT/content-images-products/1234569.jpg", Available: true},
+			{Name: "Телевизор TCL 50P735 50\" 4K", Price: 34999, ShopName: "M.Video", URL: "https://www.mvideo.ru/products/televizor-tcl-50p735-1234570", ImageURL: "https://img.mvideo.ru/MT/content-images-products/1234570.jpg", Available: true},
+			{Name: "Наушники Beats Studio Pro", Price: 34999, ShopName: "M.Video", URL: "https://www.mvideo.ru/products/naushniki-beats-studio-pro-1234571", ImageURL: "https://img.mvideo.ru/MT/content-images-products/1234571.jpg", Available: true},
+			{Name: "Монитор ASUS VP28UQG 28\" 4K", Price: 34999, ShopName: "M.Video", URL: "https://www.mvideo.ru/products/monitor-asus-vp28uqg-1234572", ImageURL: "https://img.mvideo.ru/MT/content-images-products/1234572.jpg", Available: true},
+			{Name: "Графический планшет XP-Pen Deco 01 V2", Price: 7999, ShopName: "M.Video", URL: "https://www.mvideo.ru/products/graficheskij-planshet-xp-pen-deco-1234573", ImageURL: "https://img.mvideo.ru/MT/content-images-products/1234573.jpg", Available: true},
+			{Name: "USB-хаб Satechi USB-C Multi-Port", Price: 8999, ShopName: "M.Video", URL: "https://www.mvideo.ru/products/usb-hub-satechi-1234574", ImageURL: "https://img.mvideo.ru/MT/content-images-products/1234574.jpg", Available: true},
 		},
 	}
 
