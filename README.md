@@ -1,8 +1,7 @@
-**Prerequisites:**  Node.js
+Инструкция как поднять сервер: 
 
 
-1. Install dependencies:
-   `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
-3. Run the app:
-   `npm run dev`
+1. В терминал выполни вот это и перед этим установи Node.js, если он у тебя не установлен:
+   npm install
+2. Ну и сам запуск сервера:
+   npm run dev
