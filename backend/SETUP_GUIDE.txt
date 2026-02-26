@@ -1,0 +1,315 @@
+"""
+PostgreSQL + Go Backend Configuration Guide
+
+Это файл содержит пошаговые инструкции для настройки всей системы.
+"""
+
+## STEP 1: Установка зависимостей
+
+### Windows:
+1. Установите PostgreSQL: https://www.postgresql.org/download/windows/
+2. Установите Go: https://golang.org/dl/
+3. Добавьте оба в PATH
+
+### macOS:
+```bash
+brew install postgresql go
+```
+
+### Linux (Ubuntu/Debian):
+```bash
+sudo apt-get install postgresql postgresql-contrib golang-go
+```
+
+## STEP 2: Создание базы данных
+
+### Способ 1: Автоматически (при первом запуске приложение создаст таблицы)
+Просто запустите приложение, оно создаст все таблицы автоматически.
+
+### Способ 2: Вручную
+```bash
+# Подключитесь к PostgreSQL
+psql -U postgres
+
+# Создайте БД
+CREATE DATABASE e_catalog;
+
+# Выйдите
+\q
+```
+
+## STEP 3: Конфигурация переменных окружения
+
+### Windows (Command Prompt):
+```cmd
+set DB_HOST=localhost
+set DB_PORT=5432
+set DB_USER=postgres
+set DB_PASSWORD=your_password
+set DB_NAME=e_catalog
+set PARSE_TOKEN=your_secret_token
+```
+
+### Windows (PowerShell):
+```powershell
+$env:DB_HOST="localhost"
+$env:DB_PORT="5432"
+$env:DB_USER="postgres"
+$env:DB_PASSWORD="your_password"
+$env:DB_NAME="e_catalog"
+$env:PARSE_TOKEN="your_secret_token"
+```
+
+### Linux/Mac:
+```bash
+export DB_HOST=localhost
+export DB_PORT=5432
+export DB_USER=postgres
+export DB_PASSWORD=your_password
+export DB_NAME=e_catalog
+export PARSE_TOKEN=your_secret_token
+```
+
+### Или в .env файле:
+```
+DB_HOST=localhost
+DB_PORT=5432
+DB_USER=postgres
+DB_PASSWORD=your_password
+DB_NAME=e_catalog
+PARSE_TOKEN=your_secret_token
+```
+
+## STEP 4: Установка Go модулей
+
+```bash
+cd backend
+go mod tidy
+go mod download
+```
+
+## STEP 5: Сборка и запуск
+
+### Способ 1: Скрипт установки (рекомендуется)
+
+**Windows:**
+```bash
+setup.bat
+```
+
+**Linux/Mac:**
+```bash
+chmod +x setup.sh
+./setup.sh
+```
+
+### Способ 2: Ручной запуск
+
+**Сборка:**
+```bash
+go build -o parser
+```
+
+**Запуск:**
+```bash
+./parser
+```
+
+### Способ 3: Development mode
+```bash
+go run *.go
+```
+
+## STEP 6: Docker Deployment (рекомендуется для production)
+
+### Запуск всех контейнеров:
+```bash
+# 1. Создайте .env в корне проекта
+cp backend/.env.example .env
+
+# 2. Отредактируйте переменные если нужно
+# vim .env
+
+# 3. Запустите контейнеры
+docker-compose up -d
+
+# 4. Проверьте статус
+docker-compose ps
+
+# 5. Просмотрите логи
+docker-compose logs -f go-backend
+```
+
+### Остановка:
+```bash
+docker-compose down
+```
+
+### Удаление данных:
+```bash
+docker-compose down -v
+```
+
+## STEP 7: Проверка и тестирование
+
+### Проверка здоровья сервиса:
+```bash
+curl http://localhost:8080/healthz
+```
+
+### Тест поиска:
+```bash
+curl "http://localhost:8080/api/search?q=смартфон"
+```
+
+### Получить статистику:
+```bash
+curl http://localhost:8080/api/stats
+```
+
+### Запустить парсинг (требует токен):
+```bash
+curl -H "X-Parse-Token: your_secret_token" \
+     http://localhost:8080/api/parse-all
+```
+
+## STEP 8: Интеграция с фронтендом
+
+Обновите ваше React приложение для использования API:
+
+```typescript
+// services/api.ts
+export const searchProducts = async (query: string) => {
+  const response = await fetch(
+    `http://localhost:8080/api/search?q=${encodeURIComponent(query)}`
+  );
+  return response.json();
+};
+
+export const getStats = async () => {
+  const response = await fetch('http://localhost:8080/api/stats');
+  return response.json();
+};
+```
+
+## STEP 9: Планирование регулярного парсинга (опционально)
+
+### Использование cron jobs (Linux/Mac):
+```bash
+# Отредактируйте crontab
+crontab -e
+
+# Добавьте строку для парсинга каждый день в 3 AM
+0 3 * * * curl -H "X-Parse-Token: your_token" http://localhost:8080/api/parse-all
+```
+
+### Использование Windows Task Scheduler:
+1. Откройте Task Scheduler
+2. Create Basic Task
+3. Set trigger: Daily at 03:00 AM
+4. Action: Start a program
+5. Program: `curl.exe`
+6. Arguments: `-H "X-Parse-Token: your_token" http://localhost:8080/api/parse-all`
+
+### Использование Go cron (в коде):
+```go
+import "github.com/robfig/cron/v3"
+
+func main() {
+    c := cron.New()
+    c.AddFunc("0 3 * * *", func() {
+        // Вызовите парсинг
+        scrapeAllStoresAndSave()
+    })
+    c.Start()
+}
+```
+
+## TROUBLESHOOTING
+
+### Проблема: "Error: parse-all endpoint failed"
+- Проверьте что PostgreSQL запущена
+- Проверьте переменные окружения в .env
+- Убедитесь что БД создана
+
+### Проблема: "Connection refused"
+- Убедитесь что приложение на порту 8080
+- Проверьте firewall
+- Проверьте что приложение запущено
+
+### Проблема: "Database locked"
+- Остановите все соединения к БД
+- Перезагрузите PostgreSQL
+- Очистите кэш приложения
+
+### Проблема: "Parsing timeout"
+- Увеличьте таймаут в parser.go (сейчас 60 сек)
+- Проверьте скорость интернета
+- Проверьте доступность магазинов
+
+## PERFORMANCE TIPS
+
+1. **Используйте индексы:**
+   ```sql
+   SELECT * FROM pg_stat_user_indexes;
+   ```
+
+2. **Оптимизируйте запросы:**
+   ```sql
+   EXPLAIN ANALYZE SELECT * FROM products WHERE product_name ILIKE '%%';
+   ```
+
+3. **Мониторьте размер БД:**
+   ```sql
+   SELECT pg_size_pretty(pg_database_size('e_catalog'));
+   ```
+
+4. **Очищайте старые данные:**
+   ```bash
+   curl -H "X-Parse-Token: token" http://localhost:8080/api/cleanup-old
+   ```
+
+## BACKUP & RESTORE
+
+### Создание резервной копии:
+```bash
+pg_dump -h localhost -U postgres e_catalog > backup_$(date +%Y%m%d).sql
+```
+
+### Восстановление из резервной копии:
+```bash
+psql -h localhost -U postgres e_catalog < backup_20240226.sql
+```
+
+## SECURITY CHECKLIST
+
+- [ ] Измените пароль PostgreSQL по умолчанию
+- [ ] Установите надежный PARSE_TOKEN
+- [ ] Включите HTTPS в продакшене
+- [ ] Настройте firewall правила
+- [ ] Включите логирование (в БД и приложении)
+- [ ] Установите лимиты на количество запросов
+- [ ] Регулярно проверяйте логи на ошибки
+- [ ] Используйте окружение переменные, не hardcode значения
+
+## ДАЛЬНЕЙШИЕ ШАГИ
+
+1. **Добавьте веб-интерфейс для управления:**
+   - Админ-панель для просмотра статистики
+   - Запуск парсинга через UI
+   - Управление товарами
+
+2. **Интегрируйте с вашим основным приложением:**
+   - Обновите API routes
+   - Добавьте аутентификацию
+   - Настройте CORS
+
+3. **Оптимизируйте производительность:**
+   - Добавьте Redis кэш
+   - Используйте load balancer
+   - Масштабируйте горизонтально
+
+4. **Добавьте мониторинг:**
+   - Prometheus метрики
+   - Grafana дашборд
+   - ELK стек для логов

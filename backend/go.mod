@@ -2,7 +2,10 @@ module e-catalog-backend
 
 go 1.25.1
 
-require github.com/gocolly/colly/v2 v2.3.0
+require (
+	github.com/gocolly/colly/v2 v2.3.0
+	github.com/lib/pq v1.10.9
+)
 
 require (
 	github.com/PuerkitoBio/goquery v1.11.0 // indirect
