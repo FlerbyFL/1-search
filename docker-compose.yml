@@ -1,0 +1,19 @@
+version: "3.8"
+services:
+  parser:
+    build:
+      context: ./pars-python
+      dockerfile: Dockerfile
+    container_name: e_catalog_parser
+    environment:
+      - CHROME_POOL_SIZE=3
+    ports:
+      - "8000:8000"
+    restart: unless-stopped
+    shm_size: '1gb'
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8000/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 10s
