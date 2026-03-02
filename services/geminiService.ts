@@ -2,29 +2,157 @@ import { GoogleGenAI } from "@google/genai";
 import { Product } from "../types";
 import { generateReviews } from "../constants";
 
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY || '' });
+const ai = new GoogleGenAI({ apiKey: process.env.API_KEY || "" });
+const API_BASE = (import.meta.env.VITE_API_BASE_URL || "http://localhost:8080").replace(/\/$/, "");
 
 // Helper to generate a random ID
-const generateId = () => Math.random().toString(36).substr(2, 9);
+const generateId = () => Math.random().toString(36).slice(2, 11);
 
-// --- Backend (Go scraper) → UI hydration ---
+type BackendProduct = {
+  ID?: number;
+  ExternalID?: string;
+  Name?: string;
+  Price?: number | string;
+  OldPrice?: number | string;
+  Currency?: string;
+  Shop?: string;
+  URL?: string;
+  Category?: string;
+  Brand?: string;
+  Rating?: number | string;
+  ReviewCount?: number;
+  InStock?: boolean;
+  image_url?: string;
+  name?: string;
+  price?: number | string;
+  shop_name?: string;
+  shop?: string;
+  url?: string;
+  available?: boolean;
+  category?: string;
+  brand?: string;
+  rating?: number | string;
+  review_count?: number;
+};
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const hydrateBackendProducts = (rawResults: any[], query: string): Product[] => {
-  if (!Array.isArray(rawResults) || rawResults.length === 0) return [];
+type BackendSearchResponse = {
+  data?: BackendProduct[];
+  results?: BackendProduct[];
+};
 
-  // Normalize product name to group offers from разных магазинов
-  const normalizeName = (name: string) => {
-    return name
-      .toLowerCase()
-      .replace(/[«»"']/g, "")
-      .replace(/\s+/g, " ")
-      .replace(
-        /\b(беспроводные|проводные|наушники|смартфон|телефон|ноутбук|игровой|черный|чёрный|белый|серый|серебристый|золотой|202[0-9]|202[1-9])\b/gi,
-        ""
-      )
-      .trim();
+const readString = (value: unknown): string => (typeof value === "string" ? value.trim() : "");
+
+const readNumber = (value: unknown): number => {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string") {
+    const parsed = Number(value.replace(/[^\d.,-]/g, "").replace(",", "."));
+    return Number.isFinite(parsed) ? parsed : 0;
+  }
+  return 0;
+};
+
+const readBoolean = (value: unknown, fallback = true): boolean => {
+  if (typeof value === "boolean") return value;
+  if (typeof value === "string") {
+    if (value.toLowerCase() === "true") return true;
+    if (value.toLowerCase() === "false") return false;
+  }
+  return fallback;
+};
+
+const fixCitilinkProductUrl = (url: string, externalID: string): string => {
+  const safeUrl = readString(url);
+  const safeExternalId = readString(externalID);
+  if (!safeUrl || !safeExternalId) return safeUrl;
+
+  const match = safeExternalId.match(/^citilink_(\d+)$/i);
+  if (!match) return safeUrl;
+
+  try {
+    const parsed = new URL(safeUrl);
+    if (!parsed.hostname.includes("citilink.ru")) return safeUrl;
+    if (!parsed.pathname.startsWith("/product/")) return safeUrl;
+
+    let pathname = parsed.pathname.replace(/\/+$/, "");
+    if (/-\d+$/.test(pathname)) return safeUrl;
+
+    pathname = `${pathname}-${match[1]}/`;
+    parsed.pathname = pathname;
+    return parsed.toString();
+  } catch {
+    return safeUrl;
+  }
+};
+
+const normalizeBackendProduct = (raw: BackendProduct, fallbackName: string) => {
+  const name = readString(raw.Name) || readString(raw.name) || fallbackName;
+  const price = readNumber(raw.Price ?? raw.price);
+  const shopName = readString(raw.Shop) || readString(raw.shop_name) || readString(raw.shop);
+  const externalID = readString(raw.ExternalID);
+  const url = fixCitilinkProductUrl(readString(raw.URL) || readString(raw.url), externalID);
+  const image = readString(raw.image_url);
+  const available = readBoolean(raw.InStock ?? raw.available, true);
+  const brand = readString(raw.Brand) || readString(raw.brand);
+  const category = readString(raw.Category) || readString(raw.category);
+  const rating = readNumber(raw.Rating ?? raw.rating);
+  const reviewCount = typeof raw.ReviewCount === "number" ? raw.ReviewCount : raw.review_count ?? 0;
+
+  return {
+    name,
+    price,
+    shopName,
+    url,
+    image,
+    available,
+    brand,
+    category,
+    rating,
+    reviewCount,
   };
+};
+
+const normalizeNameForGroup = (name: string): string =>
+  name
+    .toLowerCase()
+    .replace(/[«»"']/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+
+const inferCategory = (name: string, query: string): Product["category"] => {
+  const text = `${name} ${query}`.toLowerCase();
+
+  if (/headphone|earbud|airpods|sony wh|buds/i.test(text)) return "headphones";
+  if (/iphone|smartphone|galaxy|pixel|xiaomi|redmi|samsung|poco|realme|honor/i.test(text))
+    return "smartphone";
+  if (/laptop|macbook|rog|legion|ideapad|vivobook|zenbook|aspire|pavilion|notebook/i.test(text))
+    return "laptop";
+  if (/rtx|gtx|radeon|gpu|videocard/i.test(text)) return "gpu";
+  if (/watch|smartwatch|apple watch|galaxy watch|amazfit/i.test(text)) return "smartwatch";
+  if (/camera|photo|canon|nikon|sony a7|fujifilm/i.test(text)) return "camera";
+  if (/tablet|ipad|galaxy tab|xiaomi pad/i.test(text)) return "tablet";
+
+  return "smartphone";
+};
+
+const mapLogo = (shop: string): string => {
+  const value = shop.toLowerCase();
+  if (value.includes("ozon")) return "ozon";
+  if (value.includes("wildberries")) return "wb";
+  if (value.includes("dns")) return "dns";
+  if (value.includes("yandex")) return "yandex";
+  if (value.includes("m.video") || value.includes("mvideo")) return "mvideo";
+  if (value.includes("citilink")) return "citilink";
+  return "shop";
+};
+
+const getFallbackImage = (name: string, query: string): string => {
+  const seed = encodeURIComponent(name.split(" ").slice(0, 4).join(" ") || query);
+  return `https://source.unsplash.com/800x600/?${seed}`;
+};
+
+// Backend (Go scraper) -> UI hydration
+const hydrateBackendProducts = (rawResults: BackendProduct[], query: string): Product[] => {
+  if (!Array.isArray(rawResults) || rawResults.length === 0) return [];
 
   type BackendOffer = {
     id: string;
@@ -40,87 +168,51 @@ const hydrateBackendProducts = (rawResults: any[], query: string): Product[] => 
     id: string;
     name: string;
     image: string;
+    rating: number;
+    reviewCount: number;
     offers: BackendOffer[];
-  };
-
-  const inferCategory = (name: string, q: string): Product["category"] => {
-    const text = `${name} ${q}`.toLowerCase();
-    if (/наушник|headphone|wh-1000xm/i.test(text)) return "headphones";
-    if (/iphone|смартфон|smartphone|galaxy|pixel|xiaomi|redmi|samsung/i.test(text)) return "smartphone";
-    if (/ноутбук|laptop|macbook|rog|legion|ideapad|vivobook|zenbook/i.test(text)) return "laptop";
-    if (/rtx|gtx|radeon|gpu|видеокарт/i.test(text)) return "gpu";
-    if (/watch|часы|смарт-час/i.test(text)) return "smartwatch";
-    if (/камера|photo|объектив/i.test(text)) return "camera";
-    if (/планшет|tablet|ipad/i.test(text)) return "tablet";
-    // разумный дефолт
-    return "smartphone";
-  };
-
-  const mapLogo = (shop: string) => {
-    const s = shop.toLowerCase();
-    if (s.includes("ozon")) return "ozon";
-    if (s.includes("wildberries")) return "wb";
-    if (s.includes("dns")) return "dns";
-    if (s.includes("yandex")) return "yandex";
-    if (s.includes("m.video") || s.includes("mvideo")) return "mvideo";
-    if (s.includes("citilink")) return "citilink";
-    return "shop";
   };
 
   const groups = new Map<string, BackendGroup>();
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  for (const p of rawResults as any[]) {
-    const rawName = typeof p.name === "string" && p.name.trim() ? p.name.trim() : query;
-    const normKey = normalizeName(rawName) || rawName.toLowerCase();
+  for (const raw of rawResults) {
+    const normalized = normalizeBackendProduct(raw, query);
+    if (!normalized.name || !normalized.price || !normalized.shopName || !normalized.url) continue;
 
-    let group = groups.get(normKey);
+    const groupKey = normalizeNameForGroup(normalized.name);
+    let group = groups.get(groupKey);
+
     if (!group) {
-      let image = typeof p.image_url === "string" ? p.image_url : "";
-      if (!image || !image.startsWith("http")) {
-        const seed = encodeURIComponent(rawName.split(" ").slice(0, 4).join(" ") || query);
-        image = `https://source.unsplash.com/800x600/?${seed}`;
-      }
+      const image = normalized.image || getFallbackImage(normalized.name, query);
       group = {
         id: generateId(),
-        name: rawName,
+        name: normalized.name,
         image,
+        rating: normalized.rating || 4.6,
+        reviewCount: normalized.reviewCount || 0,
         offers: [],
       };
-      groups.set(normKey, group);
+      groups.set(groupKey, group);
     }
 
-    const price =
-      typeof p.price === "number"
-        ? p.price
-        : typeof p.price === "string"
-        ? Number(p.price.replace(/[^\d.,]/g, "").replace(",", "."))
-        : 0;
-    const shopName = typeof p.shop_name === "string" ? p.shop_name : "";
-    const url = typeof p.url === "string" ? p.url : "";
-
-    if (!price || !shopName || !url) continue;
-
-    const offer: BackendOffer = {
-      id: `offer-${group.offers.length}`,
-      name: shopName,
-      price: Math.round(price),
-      // Точную доставку API не отдает – ставим нейтральный текст
+    group.offers.push({
+      id: `${group.id}-${group.offers.length + 1}`,
+      name: normalized.shopName,
+      price: Math.round(normalized.price),
       delivery: "Сегодня",
-      rating: 4.5,
-      logo: mapLogo(shopName),
-      url,
-    };
-    group.offers.push(offer);
+      rating: normalized.rating || 4.5,
+      logo: mapLogo(normalized.shopName),
+      url: normalized.url,
+    });
   }
 
   const products: Product[] = [];
 
   for (const group of groups.values()) {
     if (!group.offers.length) continue;
+
     group.offers.sort((a, b) => a.price - b.price);
-    const best = group.offers[0];
-    const basePrice = best.price;
+    const bestOffer = group.offers[0];
     const category = inferCategory(group.name, query);
 
     products.push({
@@ -129,32 +221,29 @@ const hydrateBackendProducts = (rawResults: any[], query: string): Product[] => 
       category,
       image: group.image,
       images: [group.image],
-      price: basePrice,
-      rating: 4.6,
-      reviewCount: 0,
+      price: bestOffer.price,
+      rating: group.rating,
+      reviewCount: group.reviewCount,
       reviews: generateReviews(group.id, 3),
       specs: {},
       tags: [],
       description: group.name,
       priceHistory: [
-        { date: "Ранее", price: basePrice, shopName: best.name },
-        { date: "Сегодня", price: basePrice, shopName: best.name },
+        { date: "Ранее", price: bestOffer.price, shopName: bestOffer.name },
+        { date: "Сегодня", price: bestOffer.price, shopName: bestOffer.name },
       ],
       offers: group.offers,
     });
   }
 
-  // Показываем сначала самые выгодные предложения
   return products.sort((a, b) => a.price - b.price);
 };
 
-// --- Backend search helpers (multi-query for families like iPhone 15) ---
-
+// Backend search helpers (multi-query for families like iPhone 15)
 const buildBackendQueries = (query: string): string[] => {
   const trimmed = query.trim();
-  const lower = trimmed.toLowerCase();
+  if (!trimmed) return [];
 
-  // Специальный кейс: "iphone 15" без уточнений → все варианты линейки
   if (/iphone\s*15\b/i.test(trimmed) && !/(pro|plus|max)/i.test(trimmed)) {
     return ["iPhone 15", "iPhone 15 Plus", "iPhone 15 Pro", "iPhone 15 Pro Max"];
   }
@@ -162,95 +251,119 @@ const buildBackendQueries = (query: string): string[] => {
   return [trimmed];
 };
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const fetchBackendResults = async (queries: string[]): Promise<any[]> => {
-  const all: any[] = [];
+const extractBackendResults = (response: BackendSearchResponse): BackendProduct[] => {
+  if (Array.isArray(response.data)) return response.data;
+  if (Array.isArray(response.results)) return response.results;
+  return [];
+};
+
+const uniqueBackendResults = (items: BackendProduct[]): BackendProduct[] => {
+  const unique = new Map<string, BackendProduct>();
+
+  for (const item of items) {
+    const keyParts = [
+      readString(item.ExternalID),
+      readString(item.Name) || readString(item.name),
+      readString(item.Shop) || readString(item.shop_name) || readString(item.shop),
+      readString(item.URL) || readString(item.url),
+      String(readNumber(item.Price ?? item.price)),
+    ];
+    const key = keyParts.join("|").toLowerCase();
+    if (!unique.has(key)) unique.set(key, item);
+  }
+
+  return [...unique.values()];
+};
+
+const fetchBackendResults = async (queries: string[]): Promise<BackendProduct[]> => {
+  const all: BackendProduct[] = [];
 
   await Promise.all(
     queries.map(async (q) => {
       try {
         const controller = new AbortController();
-        // Даем бэкенду достаточно времени собрать цены со всех магазинов
         const timeoutId = setTimeout(() => controller.abort(), 10000);
-        const response = await fetch(`http://localhost:8080/api/search?q=${encodeURIComponent(q)}`, {
-          signal: controller.signal,
-        });
+        const response = await fetch(
+          `${API_BASE}/api/v1/products/search?q=${encodeURIComponent(q)}&limit=100`,
+          { signal: controller.signal }
+        );
         clearTimeout(timeoutId);
+
         if (!response.ok) return;
-        const data = await response.json();
-        if (Array.isArray(data.results)) {
-          all.push(...data.results);
-        }
+
+        const payload: BackendSearchResponse = await response.json();
+        all.push(...extractBackendResults(payload));
       } catch {
-        // игнорируем отдельные ошибки, продолжаем по другим магазинам/запросам
+        // Ignore partial failures and continue with other requests.
       }
     })
   );
 
-  return all;
+  return uniqueBackendResults(all);
 };
 
 export const searchProductsWithAI = async (query: string): Promise<Product[]> => {
-  // 1. TRY LOCAL BACKEND FIRST (The "Ultimate" Go Parser)
-  // Теперь можем вызывать несколько вариантов запроса (например, всю линейку iPhone 15).
   try {
     const backendQueries = buildBackendQueries(query);
     const backendResults = await fetchBackendResults(backendQueries);
     if (backendResults.length > 0) {
-      console.log("⚡ Used Go Backend for results (multi-query)");
+      console.log("Used Go Backend for results");
       return hydrateBackendProducts(backendResults, query);
     }
-  } catch (e) {
-    // Backend недоступен – для боевого режима скрейпинга
-    // не используем AI-фолбек, просто возвращаем пустой результат.
-    console.warn("Go Backend unavailable", e);
+  } catch (error) {
+    console.warn("Go Backend unavailable", error);
   }
 
-  // В боевом режиме скрейпинга не используем AI-симуляцию
-  // для поиска товаров – только реальные данные с бэкенда.
+  // No AI-simulated offers in production mode; only real backend data.
   return [];
 };
 
-const mapSpecs = (raw: any) => {
-  const specs: any = {};
+const mapSpecs = (raw: Record<string, unknown>) => {
+  const specs: Record<string, { label: string; value: unknown; important: boolean }> = {};
   Object.entries(raw).forEach(([key, val]) => {
-    specs[key.toLowerCase().replace(/\s/g, '_')] = { label: key, value: val, important: true };
+    specs[key.toLowerCase().replace(/\s/g, "_")] = { label: key, value: val, important: true };
   });
   return specs;
 };
 
-// generateAIStoreOffers удалён, так как в боевом режиме мы не создаём
-// псевдо‑офферы на основе AI – только реальные данные с бэкенда.
+void mapSpecs;
 
 export const getAIRecommendation = async (
   userQuery: string,
   products: Product[],
-  history: { role: 'user' | 'model'; text: string }[]
+  history: { role: "user" | "model"; text: string }[]
 ): Promise<{ text: string; relatedProductIds: string[] }> => {
   if (!process.env.API_KEY) return { text: "API Key missing.", relatedProductIds: [] };
 
-  const productContext = products.slice(0, 10).map(p => `ID:${p.id}|${p.name}|${p.price}₽`).join('\n');
+  const productContext = products
+    .slice(0, 10)
+    .map((p) => `ID:${p.id}|${p.name}|${p.price}₽`)
+    .join("\n");
   const fullPrompt = `Context:\n${productContext}\nUser Query: "${userQuery}"\nAnswer in Russian. Recommend products. JSON { "relatedProductIds": ["id"] } at end.`;
 
   try {
     const chat = ai.chats.create({
-      model: 'gemini-3-flash-preview',
-      history: history.map(h => ({ role: h.role, parts: [{ text: h.text }] })),
+      model: "gemini-3-flash-preview",
+      history: history.map((h) => ({ role: h.role, parts: [{ text: h.text }] })),
     });
     const result = await chat.sendMessage({ message: fullPrompt });
     const text = result.text || "";
     const jsonMatch = text.match(/\{[\s\S]*\}/);
     let relatedProductIds: string[] = [];
     let cleanText = text;
+
     if (jsonMatch) {
       try {
         const parsed = JSON.parse(jsonMatch[0]);
-        if (parsed.relatedProductIds) relatedProductIds = parsed.relatedProductIds;
-        cleanText = text.replace(jsonMatch[0], '').trim();
-      } catch (e) {}
+        if (Array.isArray(parsed.relatedProductIds)) relatedProductIds = parsed.relatedProductIds;
+        cleanText = text.replace(jsonMatch[0], "").trim();
+      } catch {
+        // Keep raw response if JSON fragment can't be parsed.
+      }
     }
+
     return { text: cleanText, relatedProductIds };
-  } catch (error) {
+  } catch {
     return { text: "Error connecting to assistant.", relatedProductIds: [] };
   }
 };

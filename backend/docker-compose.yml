@@ -1,0 +1,52 @@
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: priceparser_db
+    restart: always
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ZXCFlerbyFL
+      POSTGRES_DB: priceparser
+    ports:
+      - "5431:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      retries: 5
+
+  api:
+    build:
+      context: .
+      dockerfile: api/Dockerfile
+    container_name: priceparser_api
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DB_HOST: db
+      DB_PORT: 5432
+      DB_PASSWORD: ZXCFlerbyFL
+      DB_NAME: priceparser
+    ports:
+      - "8080:8080"
+    restart: always
+
+  parser:
+    build:
+      context: .
+      dockerfile: parser/Dockerfile
+    container_name: priceparser_parser
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DB_HOST: db
+      DB_PORT: 5432
+      DB_PASSWORD: ZXCFlerbyFL
+      DB_NAME: priceparser
+    restart: always
+
+volumes:
+  postgres_data:
