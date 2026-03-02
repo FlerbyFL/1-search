@@ -65,7 +65,7 @@ func (p *BrowserParser) ParseCategory(categoryURL string) ([]models.ParseResult,
 
 	var results []models.ParseResult
 	for _, item := range items {
-		if item.Name == "" || item.Price <= 0 {
+		if item.Name == "" || item.Price < 0 {
 			continue
 		}
 		externalID := fmt.Sprintf("%s_%s", p.shop, item.ID)

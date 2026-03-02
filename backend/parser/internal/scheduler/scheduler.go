@@ -64,7 +64,7 @@ func (w *Worker) parseTarget(t CategoryTarget) {
 		if result.Error != nil {
 			continue
 		}
-		if result.Product.Name == "" || result.Product.Price <= 0 {
+		if result.Product.Name == "" || result.Product.Price < 0 {
 			continue
 		}
 		productID, err := w.database.UpsertProduct(result.Product)
@@ -107,8 +107,8 @@ func DefaultTargets(logger *zap.Logger, scriptPath string) []CategoryTarget {
 	cl := parsers.NewBrowserParser("citilink", scriptPath, logger)
 
 	return []CategoryTarget{
-		{Parser: cl, CategoryURL: "https://www.citilink.ru/catalog/noutbuki/"},
 		{Parser: cl, CategoryURL: "https://www.citilink.ru/catalog/smartfony/"},
+		{Parser: cl, CategoryURL: "https://www.citilink.ru/catalog/noutbuki/"},
 		{Parser: cl, CategoryURL: "https://www.citilink.ru/catalog/televizory/"},
 		{Parser: cl, CategoryURL: "https://www.citilink.ru/catalog/planshetnyj-kompyuter-i-aksessuary/planshety/"},
 		{Parser: cl, CategoryURL: "https://www.citilink.ru/catalog/processory/"},

@@ -1,0 +1,29 @@
+{
+  "query": "query GetSubcategoryProductsInitialFilter($subcategoryProductsFilterInput:CatalogFilter_ProductsFilterInput!,$categoryFilterInput:Catalog_CategoryFilterInput!,$categoryCompilationFilterInput:Catalog_CategoryCompilationFilterInput!){productsFilter(filter:$subcategoryProductsFilterInput){record{...SubcategoryProductsInitialFilter},error{... on CatalogFilter_ProductsFilterInternalError{__typename,message},... on CatalogFilter_ProductsFilterIncorrectArgumentsError{__typename,message}}},category(filter:$categoryFilterInput){...SubcategoryCategoryInfo}}fragment SubcategoryProductsInitialFilter on CatalogFilter_ProductsFilter{__typename,products{...ProductSnippetFilterBase},...SubcategoryFilterAdditional}fragment ProductSnippetFilterBase on Catalog_Product{...ProductSnippetBase,labels{...ProductLabel},yandexPay{withYandexSplit},rating,counters{opinions,reviews},propertiesShort{...ProductProperty}}fragment ProductSnippetBase on Catalog_Product{id,name,shortName,slug,isAvailable,images{citilink{...Image}},price{...ProductPrice},category{id,name},brand{name},multiplicity,quantityInPackageFromSupplier,recommendations{hasAnalogProducts},accessMode}fragment Image on Image{sources{url,size}}fragment ProductPrice on Catalog_ProductPrice{current,old,club,clubPriceViewType,discount{percent},bonusPoints,sbpBonus}fragment ProductLabel on Catalog_Label{id,type,title,description,target{...Target},textColor,backgroundColor,expirationTime}fragment Target on Catalog_Target{action{...TargetAction},url,inNewWindow}fragment TargetAction on Catalog_TargetAction{id}fragment ProductProperty on Catalog_Property{name,value}fragment SubcategoryFilterAdditional on CatalogFilter_ProductsFilter{sortings{...ProductsFilterSorting},groups{...SubcategoryProductsFilterGroup},compilations{popular{...SubcategoryProductCompilationInfo},brands{...SubcategoryProductCompilationInfo},carousel{...SubcategoryProductCompilationInfo}},pageInfo{...Pagination},partialPageInfo{limit,offset},searchStrategy}fragment ProductsFilterSorting on CatalogFilter_Sorting{id,name,slug,directions{id,isSelected,name,slug,isDefault}}fragment SubcategoryProductsFilterGroup on CatalogFilter_FilterGroup{id,isCollapsed,isDisabled,name,showInShortList,isGlobal,description,filter{... on CatalogFilter_ListFilter{__typename,isSearchable,logic,filters{id,isDisabled,isInShortList,isInTagList,isSelected,name,total,childGroups{id,isCollapsed,isDisabled,name,filter{... on CatalogFilter_ListFilter{__typename,isSearchable,logic,filters{id,isDisabled,isInShortList,isInTagList,name,isSelected,total}},... on CatalogFilter_RangeFilter{__typename,fromValue,isInTagList,maxValue,minValue,serifValues,scaleStep,toValue,unit}}}}},... on CatalogFilter_RangeFilter{__typename,fromValue,isInTagList,maxValue,minValue,serifValues,scaleStep,toValue,unit}}}fragment SubcategoryProductCompilationInfo on CatalogFilter_CompilationInfo{__typename,compilation{...SubcategoryProductCompilation},isSelected}fragment SubcategoryProductCompilation on Catalog_ProductCompilation{__typename,id,type,name,slug,parentSlug,seo{h1,title,text,description}}fragment Pagination on PageInfo{hasNextPage,hasPreviousPage,perPage,page,totalItems,totalPages}fragment SubcategoryCategoryInfo on Catalog_CategoryResult{... on Catalog_Category{...Category,seo{h1,title,text,description},compilation(filter:$categoryCompilationFilterInput){... on Catalog_CategoryCompilation{__typename,id,name,seo{h1,title,description,text}},... on Catalog_CategoryCompilationIncorrectArgumentError{__typename,message},... on Catalog_CategoryCompilationNotFoundError{__typename,message}},defaultSnippetType},... on Catalog_CategoryIncorrectArgumentError{__typename,message},... on Catalog_CategoryNotFoundError{__typename,message}}fragment Category on Catalog_Category{__typename,id,name,slug,sorting{mainMenu,hubMenu,hubTiles}}",
+  "variables": {
+    "subcategoryProductsFilterInput": {
+      "categorySlug": "smartfony",
+      "compilationPath": [],
+      "pagination": {
+        "page": 1,
+        "perPage": 36
+      },
+      "partialPagination": {
+        "limit": 28,
+        "offset": 8
+      },
+      "conditions": [],
+      "sorting": {
+        "id": "",
+        "direction": "SORT_DIRECTION_DESC"
+      },
+      "popularitySegmentId": "THREE"
+    },
+    "categoryFilterInput": {
+      "slug": "smartfony"
+    },
+    "categoryCompilationFilterInput": {
+      "slug": ""
+    }
+  }
+}
