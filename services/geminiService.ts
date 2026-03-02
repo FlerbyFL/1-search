@@ -40,6 +40,18 @@ type BackendSearchResponse = {
   results?: BackendProduct[];
 };
 
+type BackendProductsResponse = {
+  data?: BackendProduct[];
+  total?: number;
+  page?: number;
+  limit?: number;
+};
+
+type CategoryIntent = {
+  category: Product["category"];
+  backendCategoryQuery: string;
+};
+
 const readString = (value: unknown): string => (typeof value === "string" ? value.trim() : "");
 
 const readNumber = (value: unknown): number => {
@@ -60,13 +72,18 @@ const readBoolean = (value: unknown, fallback = true): boolean => {
   return fallback;
 };
 
+const extractCitilinkCode = (externalID: string): string => {
+  const safeExternalId = readString(externalID);
+  const match = safeExternalId.match(/(\d{5,})/);
+  return match ? match[1] : "";
+};
+
 const fixCitilinkProductUrl = (url: string, externalID: string): string => {
   const safeUrl = readString(url);
-  const safeExternalId = readString(externalID);
-  if (!safeUrl || !safeExternalId) return safeUrl;
+  if (!safeUrl) return safeUrl;
 
-  const match = safeExternalId.match(/^citilink_(\d+)$/i);
-  if (!match) return safeUrl;
+  const productCode = extractCitilinkCode(externalID);
+  if (!productCode) return safeUrl;
 
   try {
     const parsed = new URL(safeUrl);
@@ -74,9 +91,15 @@ const fixCitilinkProductUrl = (url: string, externalID: string): string => {
     if (!parsed.pathname.startsWith("/product/")) return safeUrl;
 
     let pathname = parsed.pathname.replace(/\/+$/, "");
-    if (/-\d+$/.test(pathname)) return safeUrl;
+    const suffixMatch = pathname.match(/-(\d+)$/);
+    if (suffixMatch) {
+      if (suffixMatch[1] === productCode) return safeUrl;
+      pathname = pathname.replace(/-\d+$/, `-${productCode}`);
+    } else {
+      pathname = `${pathname}-${productCode}`;
+    }
 
-    pathname = `${pathname}-${match[1]}/`;
+    pathname = `${pathname}/`;
     parsed.pathname = pathname;
     return parsed.toString();
   } catch {
@@ -121,17 +144,50 @@ const normalizeNameForGroup = (name: string): string =>
 const inferCategory = (name: string, query: string): Product["category"] => {
   const text = `${name} ${query}`.toLowerCase();
 
-  if (/headphone|earbud|airpods|sony wh|buds/i.test(text)) return "headphones";
-  if (/iphone|smartphone|galaxy|pixel|xiaomi|redmi|samsung|poco|realme|honor/i.test(text))
+  if (/наушник|headphone|earbud|airpods|sony wh|buds/i.test(text)) return "headphones";
+  if (/смартфон|телефон|iphone|smartphone|galaxy|pixel|xiaomi|redmi|samsung|poco|realme|honor/i.test(text))
     return "smartphone";
-  if (/laptop|macbook|rog|legion|ideapad|vivobook|zenbook|aspire|pavilion|notebook/i.test(text))
+  if (/ноутбук|laptop|macbook|rog|legion|ideapad|vivobook|zenbook|aspire|pavilion|notebook/i.test(text))
     return "laptop";
-  if (/rtx|gtx|radeon|gpu|videocard/i.test(text)) return "gpu";
-  if (/watch|smartwatch|apple watch|galaxy watch|amazfit/i.test(text)) return "smartwatch";
-  if (/camera|photo|canon|nikon|sony a7|fujifilm/i.test(text)) return "camera";
-  if (/tablet|ipad|galaxy tab|xiaomi pad/i.test(text)) return "tablet";
+  if (/видеокарт|rtx|gtx|radeon|gpu|videocard/i.test(text)) return "gpu";
+  if (/процессор|cpu|ryzen|intel core/i.test(text)) return "cpu";
+  if (/часы|smartwatch|watch|apple watch|galaxy watch|amazfit/i.test(text)) return "smartwatch";
+  if (/камера|фотоаппарат|camera|photo|canon|nikon|sony a7|fujifilm/i.test(text)) return "camera";
+  if (/планшет|tablet|ipad|galaxy tab|xiaomi pad/i.test(text)) return "tablet";
 
   return "smartphone";
+};
+
+const detectCategoryIntent = (query: string): CategoryIntent | null => {
+  const trimmed = query.trim().toLowerCase();
+  if (!trimmed) return null;
+
+  if (/^(смартфон|смартфоны|телефон|телефоны|phone|smartphone|smartphones)$/.test(trimmed)) {
+    return { category: "smartphone", backendCategoryQuery: "смартфон" };
+  }
+  if (/^(ноутбук|ноутбуки|laptop|laptops|notebook)$/.test(trimmed)) {
+    return { category: "laptop", backendCategoryQuery: "ноутбук" };
+  }
+  if (/^(планшет|планшеты|tablet|tablets|ipad)$/.test(trimmed)) {
+    return { category: "tablet", backendCategoryQuery: "планшет" };
+  }
+  if (/^(наушник|наушники|headphone|headphones|earbuds|airpods)$/.test(trimmed)) {
+    return { category: "headphones", backendCategoryQuery: "наушник" };
+  }
+  if (/^(видеокарта|видеокарты|gpu|graphics card|videocard)$/.test(trimmed)) {
+    return { category: "gpu", backendCategoryQuery: "видеокарта" };
+  }
+  if (/^(процессор|процессоры|cpu|processor|processors)$/.test(trimmed)) {
+    return { category: "cpu", backendCategoryQuery: "процессор" };
+  }
+  if (/^(часы|смарт-часы|smartwatch|smartwatches|watch)$/.test(trimmed)) {
+    return { category: "smartwatch", backendCategoryQuery: "часы" };
+  }
+  if (/^(камера|камеры|фотоаппарат|camera|cameras)$/.test(trimmed)) {
+    return { category: "camera", backendCategoryQuery: "камера" };
+  }
+
+  return null;
 };
 
 const mapLogo = (shop: string): string => {
@@ -251,9 +307,11 @@ const buildBackendQueries = (query: string): string[] => {
   return [trimmed];
 };
 
-const extractBackendResults = (response: BackendSearchResponse): BackendProduct[] => {
+const extractBackendResults = (
+  response: BackendSearchResponse | BackendProductsResponse
+): BackendProduct[] => {
   if (Array.isArray(response.data)) return response.data;
-  if (Array.isArray(response.results)) return response.results;
+  if ("results" in response && Array.isArray(response.results)) return response.results;
   return [];
 };
 
@@ -302,8 +360,29 @@ const fetchBackendResults = async (queries: string[]): Promise<BackendProduct[]>
   return uniqueBackendResults(all);
 };
 
+const fetchCategoryProducts = async (categoryQuery: string): Promise<BackendProduct[]> => {
+  try {
+    const response = await fetch(
+      `${API_BASE}/api/v1/products?category=${encodeURIComponent(categoryQuery)}&page=1&limit=100`
+    );
+    if (!response.ok) return [];
+    const payload: BackendProductsResponse = await response.json();
+    return uniqueBackendResults(extractBackendResults(payload));
+  } catch {
+    return [];
+  }
+};
+
 export const searchProductsWithAI = async (query: string): Promise<Product[]> => {
   try {
+    const categoryIntent = detectCategoryIntent(query);
+    if (categoryIntent) {
+      const categoryResults = await fetchCategoryProducts(categoryIntent.backendCategoryQuery);
+      if (categoryResults.length > 0) {
+        return hydrateBackendProducts(categoryResults, categoryIntent.backendCategoryQuery);
+      }
+    }
+
     const backendQueries = buildBackendQueries(query);
     const backendResults = await fetchBackendResults(backendQueries);
     if (backendResults.length > 0) {

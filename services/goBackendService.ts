@@ -76,13 +76,18 @@ const readBoolean = (value: unknown, fallback = true): boolean => {
   return fallback;
 };
 
+const extractCitilinkCode = (externalID: string): string => {
+  const safeExternalId = readString(externalID);
+  const match = safeExternalId.match(/(\d{5,})/);
+  return match ? match[1] : "";
+};
+
 const fixCitilinkProductUrl = (url: string, externalID: string): string => {
   const safeUrl = readString(url);
-  const safeExternalId = readString(externalID);
-  if (!safeUrl || !safeExternalId) return safeUrl;
+  if (!safeUrl) return safeUrl;
 
-  const match = safeExternalId.match(/^citilink_(\d+)$/i);
-  if (!match) return safeUrl;
+  const productCode = extractCitilinkCode(externalID);
+  if (!productCode) return safeUrl;
 
   try {
     const parsed = new URL(safeUrl);
@@ -90,9 +95,15 @@ const fixCitilinkProductUrl = (url: string, externalID: string): string => {
     if (!parsed.pathname.startsWith("/product/")) return safeUrl;
 
     let pathname = parsed.pathname.replace(/\/+$/, "");
-    if (/-\d+$/.test(pathname)) return safeUrl;
+    const suffixMatch = pathname.match(/-(\d+)$/);
+    if (suffixMatch) {
+      if (suffixMatch[1] === productCode) return safeUrl;
+      pathname = pathname.replace(/-\d+$/, `-${productCode}`);
+    } else {
+      pathname = `${pathname}-${productCode}`;
+    }
 
-    pathname = `${pathname}-${match[1]}/`;
+    pathname = `${pathname}/`;
     parsed.pathname = pathname;
     return parsed.toString();
   } catch {

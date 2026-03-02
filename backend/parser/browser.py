@@ -5,7 +5,7 @@ Playwright парсер для Ситилинк.
 Использование: python browser.py <url>
 Возвращает JSON в stdout.
 """
-import sys, io, json, time
+import sys, io, json, time, re
 # Принудительно UTF-8 для stdout на Windows
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8")
 sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding="utf-8")
@@ -90,8 +90,15 @@ def parse_citilink(page, url):
 
         slug = str(item_slug or "").strip().strip("/")
         pid = str(item_id or "").strip()
-        if slug and pid and not slug.endswith(f"-{pid}"):
-            slug = f"{slug}-{pid}"
+        if slug and pid:
+            # If slug ends with a numeric suffix that is not a real product code,
+            # replace it with the actual product id instead of appending.
+            suffix = re.search(r"-(\d+)$", slug)
+            if suffix:
+                if suffix.group(1) != pid:
+                    slug = re.sub(r"-\d+$", f"-{pid}", slug)
+            elif not slug.endswith(f"-{pid}"):
+                slug = f"{slug}-{pid}"
         if slug:
             return f"https://www.citilink.ru/product/{slug}/"
         return ""

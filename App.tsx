@@ -1,6 +1,6 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { MOCK_PRODUCTS, SCENARIOS } from './constants';
-import { Product, User, Spec, Review, Scenario } from './types';
+import { Product, User, Spec, Review, Scenario, Category } from './types';
 import ProductCard from './components/ProductCard';
 import AIAssistant from './components/AIAssistant';
 import ComparisonView from './components/ComparisonView';
@@ -10,6 +10,17 @@ import AuthScreen from './components/AuthScreen';
 import ScenarioSelector from './components/ScenarioSelector';
 import { searchProductsWithAI } from './services/geminiService';
 import { Search, Bot, BarChart2, X, ArrowRight, ShieldCheck, Sparkles, ShoppingBag, Heart, Star, CheckCircle, Zap, TrendingDown, Truck, ArrowLeft, Filter, ArrowUpRight, Store, Loader2, LogOut } from 'lucide-react';
+
+const CATEGORY_LABELS: Record<Category, string> = {
+  smartphone: 'Смартфоны',
+  laptop: 'Ноутбуки',
+  tablet: 'Планшеты',
+  headphones: 'Наушники',
+  smartwatch: 'Смарт-часы',
+  camera: 'Камеры',
+  gpu: 'Видеокарты',
+  cpu: 'Процессоры',
+};
 
 function App() {
   // Auth State
@@ -38,8 +49,28 @@ function App() {
 
   // Filters State
   const [activeQuickFilter, setActiveQuickFilter] = useState<string | null>(null);
+  const [selectedCategories, setSelectedCategories] = useState<Category[]>([]);
   
   const searchInputRef = useRef<HTMLInputElement>(null);
+
+  const categoryStats = useMemo(() => {
+    const stats: Record<Category, number> = {
+      smartphone: 0,
+      laptop: 0,
+      tablet: 0,
+      headphones: 0,
+      smartwatch: 0,
+      camera: 0,
+      gpu: 0,
+      cpu: 0,
+    };
+
+    products.forEach((product) => {
+      stats[product.category] = (stats[product.category] || 0) + 1;
+    });
+
+    return (Object.entries(stats) as Array<[Category, number]>).filter(([, count]) => count > 0);
+  }, [products]);
 
   // Check for existing session
   useEffect(() => {
@@ -76,8 +107,12 @@ function App() {
 
     let result = products;
 
-    if (searchTerm && !isSearching) {
+    if (searchTerm && !isSearching && viewMode === 'home') {
       result = result.filter(p => p.name.toLowerCase().includes(searchTerm.toLowerCase()));
+    }
+
+    if (selectedCategories.length > 0) {
+      result = result.filter((p) => selectedCategories.includes(p.category));
     }
 
     if (activeQuickFilter) {
@@ -89,7 +124,13 @@ function App() {
     }
 
     setFilteredProducts(result);
-  }, [searchTerm, products, activeQuickFilter, isSearching, viewMode]);
+  }, [searchTerm, products, activeQuickFilter, selectedCategories, isSearching, viewMode]);
+
+  const toggleCategoryFilter = (category: Category) => {
+    setSelectedCategories((prev) =>
+      prev.includes(category) ? prev.filter((c) => c !== category) : [...prev, category]
+    );
+  };
 
   const toggleCompare = (product: Product) => {
     setComparisonList(prev => {
@@ -150,6 +191,7 @@ function App() {
     if (!searchTerm.trim()) return;
 
     setViewMode('results');
+    setSelectedCategories([]);
     setIsSearching(true);
     setSearchStatus('Анализируем интернет-магазины...');
     
@@ -197,7 +239,7 @@ function App() {
       {/* Navbar */}
       <header className={`fixed top-0 inset-x-0 h-16 z-40 transition-all duration-500 ${viewMode === 'results' ? 'bg-white/80 backdrop-blur-xl border-b border-slate-200' : 'bg-transparent'}`}>
         <div className="max-w-7xl mx-auto px-4 h-full flex items-center justify-between">
-          <div className="flex items-center gap-2 cursor-pointer" onClick={() => { setViewMode('home'); setSearchTerm(''); setProducts(MOCK_PRODUCTS); }}>
+          <div className="flex items-center gap-2 cursor-pointer" onClick={() => { setViewMode('home'); setSearchTerm(''); setProducts(MOCK_PRODUCTS); setSelectedCategories([]); }}>
             <div className="w-8 h-8 bg-slate-900 rounded-lg flex items-center justify-center text-lime-400 font-bold shadow-lg shadow-slate-900/20">
               1S
             </div>
@@ -326,14 +368,36 @@ function App() {
                        </div>
                     </div>
                     <div>
-                       <label className="text-xs font-bold text-slate-500 uppercase mb-3 block">Магазины</label>
+                       <div className="flex items-center justify-between mb-3">
+                          <label className="text-xs font-bold text-slate-500 uppercase">Категории</label>
+                          {selectedCategories.length > 0 && (
+                            <button
+                              type="button"
+                              onClick={() => setSelectedCategories([])}
+                              className="text-[11px] text-slate-500 hover:text-slate-700"
+                            >
+                              Сбросить
+                            </button>
+                          )}
+                       </div>
                        <div className="space-y-2">
-                          {['Ozon', 'Wildberries', 'DNS', 'Yandex Market'].map(store => (
-                             <label key={store} className="flex items-center gap-2 text-sm text-slate-700 cursor-pointer hover:text-slate-900">
-                                <input type="checkbox" className="rounded border-slate-300 text-slate-900 focus:ring-slate-900" defaultChecked />
-                                {store}
+                          {categoryStats.map(([category, count]) => (
+                             <label key={category} className="flex items-center justify-between gap-3 text-sm text-slate-700 cursor-pointer hover:text-slate-900">
+                                <span className="flex items-center gap-2">
+                                  <input
+                                    type="checkbox"
+                                    className="rounded border-slate-300 text-slate-900 focus:ring-slate-900"
+                                    checked={selectedCategories.includes(category)}
+                                    onChange={() => toggleCategoryFilter(category)}
+                                  />
+                                  {CATEGORY_LABELS[category]}
+                                </span>
+                                <span className="text-xs text-slate-400">{count}</span>
                              </label>
                           ))}
+                          {categoryStats.length === 0 && (
+                            <div className="text-xs text-slate-400">Категории появятся после поиска.</div>
+                          )}
                        </div>
                     </div>
                  </div>
