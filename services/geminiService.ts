@@ -4,6 +4,9 @@ import { generateReviews } from "../constants";
 
 const ai = new GoogleGenAI({ apiKey: process.env.API_KEY || "" });
 const API_BASE = (import.meta.env.VITE_API_BASE_URL || "http://localhost:8080").replace(/\/$/, "");
+const LOCAL_FALLBACK_IMAGE = `data:image/svg+xml;utf8,${encodeURIComponent(
+  '<svg xmlns="http://www.w3.org/2000/svg" width="800" height="600"><rect width="100%" height="100%" fill="#F1F5F9"/><text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle" fill="#64748B" font-family="Arial" font-size="40">No Image</text></svg>'
+)}`;
 
 // Helper to generate a random ID
 const generateId = () => Math.random().toString(36).slice(2, 11);
@@ -22,6 +25,7 @@ type BackendProduct = {
   Rating?: number | string;
   ReviewCount?: number;
   InStock?: boolean;
+  ImageURL?: string;
   image_url?: string;
   name?: string;
   price?: number | string;
@@ -72,6 +76,32 @@ const readBoolean = (value: unknown, fallback = true): boolean => {
   return fallback;
 };
 
+const normalizeImageUrl = (value: string): string => {
+  let normalized = readString(value);
+  if (!normalized) return "";
+
+  if (normalized.startsWith("//")) {
+    normalized = `https:${normalized}`;
+  }
+  if (normalized.startsWith("/")) {
+    normalized = `https://www.citilink.ru${normalized}`;
+  }
+
+  if (!/^https?:\/\//i.test(normalized)) {
+    return normalized;
+  }
+
+  try {
+    const parsed = new URL(normalized);
+    if (parsed.hostname === "citilink.ru" || parsed.hostname.endsWith(".citilink.ru")) {
+      return `${API_BASE}/api/v1/images/proxy?url=${encodeURIComponent(parsed.toString())}`;
+    }
+    return parsed.toString();
+  } catch {
+    return "";
+  }
+};
+
 const extractCitilinkCode = (externalID: string): string => {
   const safeExternalId = readString(externalID);
   const match = safeExternalId.match(/(\d{5,})/);
@@ -113,7 +143,7 @@ const normalizeBackendProduct = (raw: BackendProduct, fallbackName: string) => {
   const shopName = readString(raw.Shop) || readString(raw.shop_name) || readString(raw.shop);
   const externalID = readString(raw.ExternalID);
   const url = fixCitilinkProductUrl(readString(raw.URL) || readString(raw.url), externalID);
-  const image = readString(raw.image_url);
+  const image = normalizeImageUrl(readString(raw.ImageURL) || readString(raw.image_url));
   const available = readBoolean(raw.InStock ?? raw.available, true);
   const brand = readString(raw.Brand) || readString(raw.brand);
   const category = readString(raw.Category) || readString(raw.category);
@@ -202,8 +232,9 @@ const mapLogo = (shop: string): string => {
 };
 
 const getFallbackImage = (name: string, query: string): string => {
-  const seed = encodeURIComponent(name.split(" ").slice(0, 4).join(" ") || query);
-  return `https://source.unsplash.com/800x600/?${seed}`;
+  void name;
+  void query;
+  return LOCAL_FALLBACK_IMAGE;
 };
 
 // Backend (Go scraper) -> UI hydration

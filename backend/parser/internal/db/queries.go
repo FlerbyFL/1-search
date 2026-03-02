@@ -66,10 +66,17 @@ func (d *DB) GetProducts(f ProductFilter) ([]models.Product, int, error) {
 	offset := (f.Page - 1) * f.Limit
 	args = append(args, f.Limit, offset)
 	query := fmt.Sprintf(`
-		SELECT id, external_id, name, price, old_price, currency, shop, url, brand, in_stock, created_at, updated_at
-		FROM products
+		SELECT p.id, p.external_id, p.name, p.price, p.old_price, p.currency, p.shop, p.url, p.brand, p.in_stock, p.created_at, p.updated_at, COALESCE(pi.url, '') AS image_url
+		FROM products p
+		LEFT JOIN LATERAL (
+			SELECT url
+			FROM product_images
+			WHERE product_id = p.id
+			ORDER BY is_primary DESC, sort_order ASC, id ASC
+			LIMIT 1
+		) pi ON TRUE
 		WHERE %s
-		ORDER BY price ASC
+		ORDER BY p.price ASC
 		LIMIT $%d OFFSET $%d
 	`, whereStr, n, n+1)
 
@@ -79,10 +86,17 @@ func (d *DB) GetProducts(f ProductFilter) ([]models.Product, int, error) {
 
 func (d *DB) SearchProducts(q string, limit int) ([]models.Product, error) {
 	query := `
-		SELECT id, external_id, name, price, old_price, currency, shop, url, brand, in_stock, created_at, updated_at
-		FROM products
-		WHERE LOWER(name) LIKE LOWER($1) OR LOWER(brand) LIKE LOWER($1)
-		ORDER BY price ASC
+		SELECT p.id, p.external_id, p.name, p.price, p.old_price, p.currency, p.shop, p.url, p.brand, p.in_stock, p.created_at, p.updated_at, COALESCE(pi.url, '') AS image_url
+		FROM products p
+		LEFT JOIN LATERAL (
+			SELECT url
+			FROM product_images
+			WHERE product_id = p.id
+			ORDER BY is_primary DESC, sort_order ASC, id ASC
+			LIMIT 1
+		) pi ON TRUE
+		WHERE LOWER(p.name) LIKE LOWER($1) OR LOWER(p.brand) LIKE LOWER($1)
+		ORDER BY p.price ASC
 		LIMIT $2
 	`
 	return d.scanProducts(query, "%"+q+"%", limit)
@@ -135,7 +149,7 @@ func (d *DB) scanProducts(query string, args ...interface{}) ([]models.Product, 
 		err := rows.Scan(
 			&p.ID, &p.ExternalID, &p.Name, &p.Price, &p.OldPrice,
 			&p.Currency, &p.Shop, &p.URL, &p.Brand, &p.InStock,
-			&p.CreatedAt, &p.UpdatedAt,
+			&p.CreatedAt, &p.UpdatedAt, &p.ImageURL,
 		)
 		if err != nil {
 			return nil, err

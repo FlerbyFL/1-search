@@ -103,6 +103,39 @@ def parse_citilink(page, url):
             return f"https://www.citilink.ru/product/{slug}/"
         return ""
 
+    def extract_image_url(item):
+        def normalize_image_url(value):
+            if not isinstance(value, str):
+                return ""
+            url = value.strip()
+            if not url:
+                return ""
+            if url.startswith("//"):
+                return f"https:{url}"
+            if url.startswith("/"):
+                return f"https://www.citilink.ru{url}"
+            if url.startswith("http://") or url.startswith("https://"):
+                return url
+            return ""
+
+        images = item.get("imagesList")
+        if not isinstance(images, list):
+            return ""
+
+        for image in images:
+            if not isinstance(image, dict):
+                continue
+            urls = image.get("url")
+            normalized = normalize_image_url(urls)
+            if normalized:
+                return normalized
+            if isinstance(urls, dict):
+                for key in ("VERTICAL", "HORIZONTAL", "SHORT"):
+                    normalized = normalize_image_url(urls.get(key))
+                    if normalized:
+                        return normalized
+        return ""
+
     for item in items:
         name = item.get("name", "")
         price_obj = item.get("price", {})
@@ -111,6 +144,7 @@ def parse_citilink(page, url):
         slug = item.get("slug", "")
         pid = item.get("id", "")
         item_url = item.get("url", "") or item.get("link", "") or item.get("webUrl", "")
+        image_url = extract_image_url(item)
         brand = item.get("brand", {}).get("name", "") if isinstance(item.get("brand"), dict) else ""
         available = item.get("isAvailable", True)
 
@@ -123,6 +157,7 @@ def parse_citilink(page, url):
             "price": price,
             "old_price": old_price if old_price else price,
             "url": build_product_url(slug, pid, item_url),
+            "image_url": image_url,
             "brand": brand,
             "in_stock": available,
             "category": detect_category(url, name),

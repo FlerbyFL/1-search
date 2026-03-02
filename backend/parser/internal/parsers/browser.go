@@ -54,6 +54,7 @@ func (p *BrowserParser) ParseCategory(categoryURL string) ([]models.ParseResult,
 		Price    float64 `json:"price"`
 		OldPrice float64 `json:"old_price"`
 		URL      string  `json:"url"`
+		ImageURL string  `json:"image_url"`
 		Brand    string  `json:"brand"`
 		Category string  `json:"category"`
 		InStock  bool    `json:"in_stock"`
@@ -71,7 +72,7 @@ func (p *BrowserParser) ParseCategory(categoryURL string) ([]models.ParseResult,
 		if item.ID == "" {
 			externalID = fmt.Sprintf("%s_%s", p.shop, item.URL)
 		}
-		results = append(results, models.ParseResult{
+		parsed := models.ParseResult{
 			Product: models.Product{
 				ExternalID: externalID,
 				Name:       item.Name,
@@ -84,7 +85,11 @@ func (p *BrowserParser) ParseCategory(categoryURL string) ([]models.ParseResult,
 				Category:   item.Category,
 				InStock:    item.InStock,
 			},
-		})
+		}
+		if item.ImageURL != "" {
+			parsed.Images = []string{item.ImageURL}
+		}
+		results = append(results, parsed)
 	}
 
 	p.logger.Info("Browser parsed", zap.String("shop", p.shop), zap.Int("products", len(results)))

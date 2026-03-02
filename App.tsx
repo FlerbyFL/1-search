@@ -22,6 +22,10 @@ const CATEGORY_LABELS: Record<Category, string> = {
   cpu: 'Процессоры',
 };
 
+const IMAGE_FALLBACK = `data:image/svg+xml;utf8,${encodeURIComponent(
+  '<svg xmlns="http://www.w3.org/2000/svg" width="800" height="600"><rect width="100%" height="100%" fill="#F1F5F9"/><text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle" fill="#64748B" font-family="Arial" font-size="40">No Image</text></svg>'
+)}`;
+
 function App() {
   // Auth State
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -506,6 +510,11 @@ function App() {
                        src={selectedProduct.image} 
                        alt={selectedProduct.name} 
                        className="w-full h-full object-contain mix-blend-multiply" 
+                       onError={(e) => {
+                         if (e.currentTarget.src !== IMAGE_FALLBACK) {
+                           e.currentTarget.src = IMAGE_FALLBACK;
+                         }
+                       }}
                     />
                 </div>
 

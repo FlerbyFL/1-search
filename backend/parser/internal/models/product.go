@@ -16,6 +16,7 @@ type Product struct {
 	Rating      float64   `db:"rating"`
 	ReviewCount int       `db:"review_count"`
 	InStock     bool      `db:"in_stock"`
+	ImageURL    string    `db:"image_url"`
 	CreatedAt   time.Time `db:"created_at"`
 	UpdatedAt   time.Time `db:"updated_at"`
 }

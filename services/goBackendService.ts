@@ -1,6 +1,9 @@
 import { Product } from "../types";
 
 const API_BASE = (import.meta.env.VITE_API_BASE_URL || "http://localhost:8080").replace(/\/$/, "");
+const LOCAL_FALLBACK_IMAGE = `data:image/svg+xml;utf8,${encodeURIComponent(
+  '<svg xmlns="http://www.w3.org/2000/svg" width="800" height="600"><rect width="100%" height="100%" fill="#F1F5F9"/><text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle" fill="#64748B" font-family="Arial" font-size="40">No Image</text></svg>'
+)}`;
 
 interface GoApiProduct {
   ID?: number;
@@ -16,6 +19,7 @@ interface GoApiProduct {
   Rating?: number | string;
   ReviewCount?: number;
   InStock?: boolean;
+  ImageURL?: string;
 
   // Backward compatibility fields
   name?: string;
@@ -74,6 +78,32 @@ const readBoolean = (value: unknown, fallback = true): boolean => {
     if (value.toLowerCase() === "false") return false;
   }
   return fallback;
+};
+
+const normalizeImageUrl = (value: string): string => {
+  let normalized = readString(value);
+  if (!normalized) return "";
+
+  if (normalized.startsWith("//")) {
+    normalized = `https:${normalized}`;
+  }
+  if (normalized.startsWith("/")) {
+    normalized = `https://www.citilink.ru${normalized}`;
+  }
+
+  if (!/^https?:\/\//i.test(normalized)) {
+    return normalized;
+  }
+
+  try {
+    const parsed = new URL(normalized);
+    if (parsed.hostname === "citilink.ru" || parsed.hostname.endsWith(".citilink.ru")) {
+      return `${API_BASE}/api/v1/images/proxy?url=${encodeURIComponent(parsed.toString())}`;
+    }
+    return parsed.toString();
+  } catch {
+    return "";
+  }
 };
 
 const extractCitilinkCode = (externalID: string): string => {
@@ -135,7 +165,7 @@ const normalizeGoProduct = (raw: GoApiProduct) => {
     readString(raw.URL) || readString(raw.url),
     readString(raw.ExternalID)
   );
-  const image = readString(raw.image_url);
+  const image = normalizeImageUrl(readString(raw.ImageURL) || readString(raw.image_url));
   const rating = readNumber(raw.Rating ?? raw.rating);
   const reviewCount = typeof raw.ReviewCount === "number" ? raw.ReviewCount : raw.review_count ?? 0;
   const available = readBoolean(raw.InStock ?? raw.available, true);
@@ -158,8 +188,8 @@ export const convertGoProductToUI = (goProduct: GoApiProduct): Product => {
     id: idSource.replace(/\s+/g, "-").toLowerCase(),
     name: safeName,
     category: inferProductCategory(safeName),
-    image: normalized.image || "https://via.placeholder.com/300x300?text=No+Image",
-    images: [normalized.image || "https://via.placeholder.com/300x300?text=No+Image"],
+    image: normalized.image || LOCAL_FALLBACK_IMAGE,
+    images: [normalized.image || LOCAL_FALLBACK_IMAGE],
     price: Math.round(normalized.price || 0),
     rating: normalized.rating || 4.5,
     reviewCount: normalized.reviewCount || 0,
