@@ -27,7 +27,7 @@ docker --version
 docker compose version
 ```
 
-## Быстрый старт (рекомендуемый)
+## Быстрый старт
 
 ### 1) Запустить backend (БД + API + parser)
 
@@ -42,7 +42,7 @@ docker compose up -d --build
 Invoke-WebRequest http://localhost:8080/health -UseBasicParsing
 ```
 
-Ожидается статус `200`.
+Должно быть `200`.
 
 ### 2) Запустить frontend
 
@@ -159,43 +159,3 @@ Invoke-RestMethod "http://localhost:8080/api/v1/products?shop=citilink&page=1&li
 Invoke-RestMethod "http://localhost:8080/api/v1/categories"
 ```
 
-## Частые проблемы
-
-### 1) `port already in use`
-
-Проверьте занятые порты `3000`, `8080`, `5431` и остановите конфликтующие процессы/контейнеры.
-
-### 2) Frontend не видит backend
-
-- убедитесь, что `http://localhost:8080/health` отвечает `200`;
-- проверьте значение `VITE_API_BASE_URL` (если задавали);
-- после изменения `.env.local` перезапустите `npm run dev`.
-
-### 3) Кнопка "Перейти к магазину" ведет на 404 у старых данных Citilink
-
-В проект уже добавлено исправление для новых и старых ссылок, но если у вас старая БД, можно принудительно обновить ссылки:
-
-```powershell
-docker exec -i priceparser_db psql -U postgres -d priceparser -c "WITH to_fix AS ( SELECT id, external_id, url, regexp_replace(url, '/+$', '') || '-' || regexp_replace(external_id, '^citilink_', '') || '/' AS new_url FROM products WHERE shop='citilink' AND external_id ~ '^citilink_[0-9]+$' AND url ~ '^https://www\\.citilink\\.ru/product/.+/$' AND regexp_replace(url, '/+$', '') !~ '-[0-9]+$' ) UPDATE products p SET url = f.new_url, updated_at = NOW() FROM to_fix f WHERE p.id = f.id;"
-```
-
-## Структура проекта
-
-```text
-1-search/
-  App.tsx
-  components/
-  services/
-  backend/
-    api/
-    parser/
-    docker-compose.yml
-```
-
-## Production note
-
-Текущая конфигурация ориентирована на локальную разработку. Перед production обязательно:
-- вынести секреты из репозитория;
-- настроить отдельные пароли и переменные окружения;
-- ограничить CORS;
-- добавить мониторинг и ротацию логов.
