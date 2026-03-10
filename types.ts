@@ -1,4 +1,4 @@
-export type Category = 'laptop' | 'smartphone' | 'gpu' | 'cpu' | 'headphones' | 'smartwatch' | 'camera' | 'tablet';
+export type Category = 'laptop' | 'smartphone' | 'gpu' | 'cpu' | 'headphones' | 'smartwatch' | 'camera' | 'tablet' | 'tv';
 
 export interface PricePoint {
   date: string;
@@ -30,6 +30,7 @@ export interface StoreOffer {
   id: string;
   name: string;
   price: number;
+  oldPrice?: number;
   delivery: string;
   rating: number;
   logo: string; // URL or name for icon
@@ -43,6 +44,7 @@ export interface Product {
   image: string; // Main image
   images: string[]; // Gallery
   price: number;
+  oldPrice?: number;
   rating: number;
   reviewCount: number;
   reviews: Review[];
@@ -51,6 +53,8 @@ export interface Product {
   tags: string[];
   description: string;
   offers: StoreOffer[];
+  brand?: string;
+  inStock?: boolean;
 }
 
 export interface User {

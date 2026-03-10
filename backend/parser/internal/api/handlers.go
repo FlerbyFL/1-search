@@ -8,10 +8,13 @@ import (
 	"strings"
 	"time"
 
+	"golang.org/x/crypto/bcrypt"
+
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
 
 	"backend/parser/internal/db"
+	"backend/parser/internal/models"
 )
 
 type Handler struct {
@@ -30,6 +33,12 @@ func (h *Handler) SetupRoutes(r *gin.Engine) {
 		api.GET("/products/search", h.SearchProducts)
 		api.GET("/categories", h.GetCategories)
 		api.GET("/images/proxy", h.ProxyImage)
+
+		auth := api.Group("/auth")
+		{
+			auth.POST("/register", h.Register)
+			auth.POST("/login", h.Login)
+		}
 	}
 	// Health check
 	r.GET("/health", func(c *gin.Context) {
@@ -40,9 +49,12 @@ func (h *Handler) SetupRoutes(r *gin.Engine) {
 // GET /api/v1/products?category=&brand=&min_price=&max_price=&page=&limit=
 func (h *Handler) GetProducts(c *gin.Context) {
 	filter := db.ProductFilter{
-		Category: c.Query("category"),
-		Brand:    c.Query("brand"),
-		Shop:     c.Query("shop"),
+		Category:  c.Query("category"),
+		Brand:     c.Query("brand"),
+		Shop:      c.Query("shop"),
+		Search:    c.Query("q"),
+		SortBy:    c.DefaultQuery("sort_by", "price"),
+		SortOrder: c.DefaultQuery("sort_order", "asc"),
 	}
 
 	if v := c.Query("min_price"); v != "" {
@@ -53,6 +65,21 @@ func (h *Handler) GetProducts(c *gin.Context) {
 	if v := c.Query("max_price"); v != "" {
 		if f, err := strconv.ParseFloat(v, 64); err == nil {
 			filter.MaxPrice = f
+		}
+	}
+	if v := c.Query("min_rating"); v != "" {
+		if f, err := strconv.ParseFloat(v, 64); err == nil {
+			filter.MinRating = f
+		}
+	}
+	if v := c.Query("in_stock"); v != "" {
+		if b, err := strconv.ParseBool(v); err == nil {
+			filter.InStock = &b
+		}
+	}
+	if v := c.Query("has_discount"); v != "" {
+		if b, err := strconv.ParseBool(v); err == nil {
+			filter.HasDiscount = &b
 		}
 	}
 	filter.Page = 1
@@ -81,6 +108,102 @@ func (h *Handler) GetProducts(c *gin.Context) {
 		"page":  filter.Page,
 		"limit": filter.Limit,
 	})
+}
+
+type authRequest struct {
+	Name     string `json:"name"`
+	Email    string `json:"email"`
+	Password string `json:"password"`
+}
+
+type authUserResponse struct {
+	ID       string   `json:"id"`
+	Name     string   `json:"name"`
+	Email    string   `json:"email"`
+	Avatar   string   `json:"avatar"`
+	Cart     []string `json:"cart"`
+	Wishlist []string `json:"wishlist"`
+	History  []string `json:"history"`
+	Bonuses  int      `json:"bonuses"`
+	Status   string   `json:"status"`
+}
+
+func (h *Handler) Register(c *gin.Context) {
+	var req authRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body"})
+		return
+	}
+
+	name := strings.TrimSpace(req.Name)
+	email := strings.ToLower(strings.TrimSpace(req.Email))
+	password := strings.TrimSpace(req.Password)
+
+	if name == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "name is required"})
+		return
+	}
+	if !strings.Contains(email, "@") {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "valid email is required"})
+		return
+	}
+	if len(password) < 6 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "password must be at least 6 characters"})
+		return
+	}
+
+	passwordHash, err := hashPassword(password)
+	if err != nil {
+		h.logger.Error("password hash failed", zap.Error(err))
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create user"})
+		return
+	}
+
+	user, err := h.db.CreateUser(name, email, passwordHash)
+	if err != nil {
+		if err == db.ErrUserAlreadyExists {
+			c.JSON(http.StatusConflict, gin.H{"error": "user already exists"})
+			return
+		}
+		h.logger.Error("register failed", zap.Error(err))
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create user"})
+		return
+	}
+
+	c.JSON(http.StatusCreated, gin.H{"user": mapUserResponse(user)})
+}
+
+func (h *Handler) Login(c *gin.Context) {
+	var req authRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body"})
+		return
+	}
+
+	email := strings.ToLower(strings.TrimSpace(req.Email))
+	password := strings.TrimSpace(req.Password)
+	if !strings.Contains(email, "@") || password == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "email and password are required"})
+		return
+	}
+
+	user, err := h.db.GetUserByEmail(email)
+	if err != nil {
+		if err == db.ErrUserNotFound {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid email or password"})
+			return
+		}
+		h.logger.Error("login lookup failed", zap.Error(err))
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal error"})
+		return
+	}
+
+	if err := bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(password)); err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid email or password"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"user": mapUserResponse(user)})
 }
 
 // GET /api/v1/products/search?q=ноутбук&limit=20
@@ -198,4 +321,26 @@ func normalizeImageURL(raw string) (string, error) {
 	}
 
 	return u.String(), nil
+}
+
+func hashPassword(password string) (string, error) {
+	hashed, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	if err != nil {
+		return "", err
+	}
+	return string(hashed), nil
+}
+
+func mapUserResponse(user models.User) authUserResponse {
+	return authUserResponse{
+		ID:       "u-" + strconv.FormatInt(user.ID, 10),
+		Name:     user.Name,
+		Email:    user.Email,
+		Avatar:   user.Avatar,
+		Cart:     user.Cart,
+		Wishlist: user.Wishlist,
+		History:  user.History,
+		Bonuses:  user.Bonuses,
+		Status:   user.Status,
+	}
 }

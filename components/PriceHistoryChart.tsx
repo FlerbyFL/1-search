@@ -14,33 +14,30 @@ const PriceHistoryChart: React.FC<PriceHistoryChartProps> = ({ data }) => {
         <AreaChart data={data}>
           <defs>
             <linearGradient id="colorPrice" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="5%" stopColor="#84cc16" stopOpacity={0.2}/>
-              <stop offset="95%" stopColor="#84cc16" stopOpacity={0}/>
+              <stop offset="5%" stopColor="#84cc16" stopOpacity={0.2} />
+              <stop offset="95%" stopColor="#84cc16" stopOpacity={0} />
             </linearGradient>
           </defs>
           <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-          <XAxis 
-            dataKey="date" 
-            tick={{fontSize: 10}} 
+          <XAxis
+            dataKey="date"
+            tick={{ fontSize: 10 }}
             axisLine={false}
             tickLine={false}
           />
-          <YAxis 
-            hide 
-            domain={['dataMin - 100', 'dataMax + 100']} 
-          />
-          <Tooltip 
+          <YAxis hide domain={['dataMin - 100', 'dataMax + 100']} />
+          <Tooltip
             contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
             formatter={(value: number) => [`${value.toLocaleString('ru-RU')} ₽`, 'Цена']}
             labelStyle={{ color: '#64748b' }}
           />
-          <Area 
-            type="monotone" 
-            dataKey="price" 
-            stroke="#84cc16" 
+          <Area
+            type="monotone"
+            dataKey="price"
+            stroke="#84cc16"
             strokeWidth={2}
-            fillOpacity={1} 
-            fill="url(#colorPrice)" 
+            fillOpacity={1}
+            fill="url(#colorPrice)"
           />
         </AreaChart>
       </ResponsiveContainer>

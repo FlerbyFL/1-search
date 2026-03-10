@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
 Playwright parser for Citilink.
@@ -33,24 +32,6 @@ def to_int(value, default=0):
         return default
 
 
-def detect_category(url, name):
-    url = str(url).lower()
-    name = str(name).lower()
-    if "noutbuki" in url or "ноутбук" in name:
-        return "Ноутбуки"
-    if "smartfony" in url or "смартфон" in name or "телефон" in name:
-        return "Смартфоны"
-    if "televizory" in url or "телевизор" in name:
-        return "Телевизоры"
-    if "planshety" in url or "планшет" in name:
-        return "Планшеты"
-    if "processory" in url or "процессор" in name:
-        return "Процессоры"
-    if "videokarty" in url or "видеокарт" in name:
-        return "Видеокарты"
-    return ""
-
-
 def normalize_image_url(value):
     if not isinstance(value, str):
         return ""
@@ -65,6 +46,69 @@ def normalize_image_url(value):
         return url
     return ""
 
+
+def uniq_urls(urls, limit=4):
+    seen = set()
+    result = []
+    for url in urls:
+        normalized = normalize_image_url(url)
+        if not normalized or normalized in seen:
+            continue
+        seen.add(normalized)
+        result.append(normalized)
+        if len(result) >= limit:
+            break
+    return result
+
+
+def normalize_for_match(text):
+    if not isinstance(text, str):
+        text = str(text or "")
+    lowered = text.lower()
+    # Handle common mojibake traces if they appear in upstream values.
+    if "СЂ" in lowered:
+        lowered = (
+            lowered.replace("СЂС•", "Рѕ")
+            .replace("СЂВµ", "Рµ")
+            .replace("СЂВ°", "Р°")
+            .replace("СЃ", "СЃ")
+            .replace("С‘", "Рµ")
+        )
+    return lowered
+
+
+def has_any(text, needles):
+    for needle in needles:
+        if needle in text:
+            return True
+    return False
+
+
+def detect_category(url, name, category_name=""):
+    url_text = normalize_for_match(url)
+    name_text = normalize_for_match(name)
+    cat_text = normalize_for_match(category_name)
+    text = " ".join([url_text, name_text, cat_text])
+
+    if has_any(text, ["televizory", "телевизор", "tv", "qled", "oled", "android tv", "smart tv"]):
+        return "tv"
+    if has_any(text, ["noutbuki", "ноутбук", "laptop", "notebook", "macbook"]):
+        return "laptop"
+    if has_any(text, ["smartfony", "смартфон", "телефон", "smartphone", "mobile phone", "iphone"]):
+        return "smartphone"
+    if has_any(text, ["planshet", "планшет", "tablet", "ipad", "galaxy tab"]):
+        return "tablet"
+    if has_any(text, ["processory", "процессор", " cpu ", "ryzen", "intel core"]):
+        return "cpu"
+    if has_any(text, ["videokarty", "видеокарт", "gpu", "rtx", "gtx", "radeon"]):
+        return "gpu"
+    if has_any(text, ["naushnik", "наушник", "headphone", "earbud", "airpods"]):
+        return "headphones"
+    if has_any(text, ["smartwatch", "смарт", "часы", "watch", "amazfit", "apple watch"]):
+        return "smartwatch"
+    if has_any(text, ["камера", "фотоаппарат", "camera", "canon", "nikon", "fujifilm"]):
+        return "camera"
+    return ""
 
 def build_product_url(item_slug, item_id, raw_item_url):
     # Prefer URL from source payload when it exists.
@@ -89,62 +133,91 @@ def build_product_url(item_slug, item_id, raw_item_url):
     return ""
 
 
-def extract_image_url_legacy(item):
+def extract_legacy_image_candidates(item):
     images = item.get("imagesList")
     if not isinstance(images, list):
-        return ""
+        return []
 
+    candidates = []
+    preferred_keys = ("XL", "LARGE", "ML", "M", "MD", "VERTICAL", "HORIZONTAL", "SHORT", "SM", "XS")
     for image in images:
         if not isinstance(image, dict):
             continue
-        urls = image.get("url")
-        normalized = normalize_image_url(urls)
-        if normalized:
-            return normalized
-        if isinstance(urls, dict):
-            for key in ("VERTICAL", "HORIZONTAL", "SHORT"):
-                normalized = normalize_image_url(urls.get(key))
-                if normalized:
-                    return normalized
-    return ""
+        url_value = image.get("url")
+        if isinstance(url_value, str):
+            candidates.append(url_value)
+            continue
+        if isinstance(url_value, dict):
+            for key in preferred_keys:
+                if key in url_value:
+                    candidates.append(url_value.get(key))
+            for value in url_value.values():
+                candidates.append(value)
+    return candidates
 
 
-def extract_image_url_graphql(item):
+def extract_image_urls_legacy(item, limit=4):
+    return uniq_urls(extract_legacy_image_candidates(item), limit=limit)
+
+
+def sort_sources_by_quality(sources):
+    if not isinstance(sources, list):
+        return []
+    rank = {
+        "XL": 0,
+        "LARGE": 1,
+        "L": 2,
+        "ML": 3,
+        "M": 4,
+        "MD": 5,
+        "SM": 6,
+        "S": 7,
+        "XS": 8,
+        "THUMB": 9,
+    }
+
+    prepared = []
+    for source in sources:
+        if not isinstance(source, dict):
+            continue
+        url = normalize_image_url(source.get("url"))
+        if not url:
+            continue
+        size = str(source.get("size", "")).upper()
+        prepared.append((rank.get(size, 100), url))
+
+    prepared.sort(key=lambda x: x[0])
+    return [url for _, url in prepared]
+
+
+def extract_image_urls_graphql(item, limit=4):
     images = item.get("images")
     if not isinstance(images, dict):
-        return ""
+        return []
 
     gallery = images.get("citilink")
     if not isinstance(gallery, list):
-        return ""
+        return []
 
+    primary = []
+    alternates = []
     for image in gallery:
         if not isinstance(image, dict):
             continue
-        sources = image.get("sources")
-        if not isinstance(sources, list):
+        sorted_urls = sort_sources_by_quality(image.get("sources"))
+        if not sorted_urls:
             continue
+        primary.append(sorted_urls[0])
+        if len(sorted_urls) > 1:
+            alternates.extend(sorted_urls[1:])
 
-        by_size = {}
-        first = ""
-        for source in sources:
-            if not isinstance(source, dict):
-                continue
-            normalized = normalize_image_url(source.get("url"))
-            if not normalized:
-                continue
-            size = str(source.get("size", "")).upper()
-            if size and size not in by_size:
-                by_size[size] = normalized
-            if not first:
-                first = normalized
-
-        for preferred in ("MD", "ML", "XL", "SM", "XS"):
-            if preferred in by_size:
-                return by_size[preferred]
-        if first:
-            return first
-    return ""
+    # Prefer different photos first, then fill with additional sizes if needed.
+    combined = uniq_urls(primary, limit=limit)
+    if len(combined) < min(2, limit):
+        combined = uniq_urls(primary + alternates, limit=limit)
+    elif len(combined) < limit:
+        combined = uniq_urls(primary + alternates, limit=limit)
+    return combined
 
 
 def map_graphql_product(item, category_url):
@@ -164,18 +237,36 @@ def map_graphql_product(item, category_url):
 
     item_id = str(item.get("id", "")).strip()
     product_url = build_product_url(item.get("slug", ""), item_id, item.get("url", ""))
-    image_url = extract_image_url_graphql(item)
+
+    image_urls = extract_image_urls_graphql(item, limit=4)
+    if not image_urls:
+        image_urls = extract_image_urls_legacy(item, limit=4)
+    image_url = image_urls[0] if image_urls else ""
 
     brand = ""
     brand_obj = item.get("brand")
     if isinstance(brand_obj, dict):
         brand = str(brand_obj.get("name", "")).strip()
 
-    category = detect_category(category_url, name)
+    category_name = ""
+    cat_obj = item.get("category")
+    if isinstance(cat_obj, dict):
+        category_name = str(cat_obj.get("name", "")).strip()
+    category = detect_category(category_url, name, category_name)
     if not category:
-        cat_obj = item.get("category")
-        if isinstance(cat_obj, dict):
-            category = str(cat_obj.get("name", "")).strip()
+        category = category_name
+
+    specs = []
+    properties_short = item.get("propertiesShort")
+    if isinstance(properties_short, list):
+        for prop in properties_short:
+            if not isinstance(prop, dict):
+                continue
+            prop_name = str(prop.get("name", "")).strip()
+            prop_value = str(prop.get("value", "")).strip()
+            if not prop_name or not prop_value:
+                continue
+            specs.append({"name": prop_name, "value": prop_value})
 
     return {
         "id": item_id,
@@ -184,9 +275,11 @@ def map_graphql_product(item, category_url):
         "old_price": old_price if old_price else price,
         "url": product_url,
         "image_url": image_url,
+        "images": image_urls,
         "brand": brand,
         "in_stock": bool(item.get("isAvailable", True)),
         "category": category,
+        "specs": specs,
     }
 
 
@@ -402,7 +495,8 @@ def parse_citilink_fallback_html(page, category_url):
         slug = item.get("slug", "")
         pid = item.get("id", "")
         item_url = item.get("url", "") or item.get("link", "") or item.get("webUrl", "")
-        image_url = extract_image_url_legacy(item)
+        image_urls = extract_image_urls_legacy(item, limit=4)
+        image_url = image_urls[0] if image_urls else ""
         brand = item.get("brand", {}).get("name", "") if isinstance(item.get("brand"), dict) else ""
         available = item.get("isAvailable", True)
 
@@ -419,9 +513,11 @@ def parse_citilink_fallback_html(page, category_url):
                 "old_price": normalized_old_price if normalized_old_price else normalized_price,
                 "url": build_product_url(slug, pid, item_url),
                 "image_url": image_url,
+                "images": image_urls,
                 "brand": brand,
                 "in_stock": available,
                 "category": detect_category(category_url, name),
+                "specs": [],
             }
         )
 

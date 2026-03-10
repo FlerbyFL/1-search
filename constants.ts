@@ -13,8 +13,8 @@ export const MOCK_USER: User = {
 };
 
 export const SCENARIOS: Scenario[] = [
-  { id: 'coding', label: 'Programming', icon: '💻', description: 'High RAM, good CPU', promptModifier: '' },
-  { id: 'gaming', label: 'Gaming', icon: '🎮', description: 'High GPU power', promptModifier: '' },
+  { id: 'coding', label: 'Программирование', icon: '💻', description: 'Много ОЗУ, мощный процессор', promptModifier: '' },
+  { id: 'gaming', label: 'Гейминг', icon: '🎮', description: 'Максимальная мощность видеокарты', promptModifier: '' },
 ];
 
 export const reviewSources = ['Ozon', 'Wildberries', 'Yandex Market', 'DNS', 'M.Video', 'Citilink'] as const;
@@ -23,25 +23,25 @@ export const generateReviews = (productId: string, count: number): Review[] => {
   const reviews: Review[] = [];
   const authors = ['Иван П.', 'Мария К.', 'Сергей В.', 'Елена Д.', 'Дмитрий О.', 'Анна С.', 'Кирилл М.', 'Ольга Р.'];
   const titles = [
-    'Отличный товар, рекомендую!', 
-    'Своих денег стоит', 
-    'Есть небольшие недостатки', 
-    'Превзошло ожидания', 
+    'Отличный товар, рекомендую!',
+    'Своих денег стоит',
+    'Есть небольшие недостатки',
+    'Превзошло ожидания',
     'Нормально, но доставка долгая',
     'Топ за свои деньги',
-    'Качество сборки радует'
+    'Качество сборки радует',
   ];
   const contents = [
-    "Пользуюсь уже месяц, полет нормальный. Качество сборки на высоте, ничего не люфтит.",
-    "За эту цену - лучший вариант на рынке. Единственный минус - маркий корпус.",
-    "Доставили быстро, упаковка целая. Работает шустро, экраном доволен.",
-    "В целом хорошо, но ожидал большей автономности. На день хватает впритык.",
-    "Топовая вещь! Очень удобно сидит в руке/на голове. Звук чистый.",
-    "Сравнил с аналогами - этот выигрывает по всем параметрам. Рекомендую к покупке.",
-    "Брал в подарок, именинник доволен. Выглядит дороже своей цены."
+    'Пользуюсь уже месяц, все работает отлично. Качество сборки на высоте, ничего не люфтит.',
+    'За эту цену один из лучших вариантов на рынке. Из минусов только маркий корпус.',
+    'Доставили быстро, упаковка целая. Работает шустро, экраном доволен.',
+    'В целом хорошо, но ожидал большей автономности. На день хватает впритык.',
+    'Очень удобная вещь, приятно пользоваться каждый день. Качество звука и материалов отличное.',
+    'Сравнил с аналогами, этот вариант выглядит наиболее сбалансированным по параметрам.',
+    'Брал в подарок, именинник доволен. Выглядит дороже своей цены.',
   ];
-  
-  for(let i=0; i<count; i++) {
+
+  for (let i = 0; i < count; i++) {
     reviews.push({
       id: `r-${productId}-${i}`,
       author: authors[i % authors.length],
@@ -52,7 +52,7 @@ export const generateReviews = (productId: string, count: number): Review[] => {
       content: contents[i % contents.length],
       verified: Math.random() > 0.2,
       helpfulCount: Math.floor(Math.random() * 50),
-      source: reviewSources[Math.floor(Math.random() * reviewSources.length)]
+      source: reviewSources[Math.floor(Math.random() * reviewSources.length)],
     });
   }
   return reviews;
@@ -66,21 +66,22 @@ const generateOffers = (basePrice: number, productName: string): StoreOffer[] =>
     { name: 'DNS', variance: 0.02, delivery: 'Сегодня', logo: 'dns', url: `https://www.dns-shop.ru/search/?q=${encodedName}` },
     { name: 'Yandex Market', variance: -0.02, delivery: 'Сегодня', logo: 'yandex', url: `https://market.yandex.ru/search?text=${encodedName}` },
     { name: 'Citilink', variance: 0.01, delivery: 'Завтра', logo: 'citilink', url: `https://www.citilink.ru/search/?text=${encodedName}` },
-    { name: 'M.Video', variance: 0.03, delivery: 'Сегодня', logo: 'mvideo', url: `https://www.mvideo.ru/product-list-page?q=${encodedName}` }
+    { name: 'M.Video', variance: 0.03, delivery: 'Сегодня', logo: 'mvideo', url: `https://www.mvideo.ru/product-list-page?q=${encodedName}` },
   ];
 
-  // Randomly select 3-4 stores
   const selectedStores = stores.sort(() => 0.5 - Math.random()).slice(0, 3 + Math.floor(Math.random() * 2));
 
-  return selectedStores.map((store, idx) => ({
-    id: `offer-${idx}`,
-    name: store.name,
-    price: Math.floor(basePrice * (1 + store.variance + (Math.random() * 0.04 - 0.02))),
-    delivery: store.delivery,
-    rating: 4.5 + Math.random() * 0.5,
-    logo: store.logo,
-    url: store.url
-  })).sort((a, b) => a.price - b.price);
+  return selectedStores
+    .map((store, idx) => ({
+      id: `offer-${idx}`,
+      name: store.name,
+      price: Math.floor(basePrice * (1 + store.variance + (Math.random() * 0.04 - 0.02))),
+      delivery: store.delivery,
+      rating: 4.5 + Math.random() * 0.5,
+      logo: store.logo,
+      url: store.url,
+    }))
+    .sort((a, b) => a.price - b.price);
 };
 
 export const MOCK_PRODUCTS: Product[] = [
@@ -278,7 +279,7 @@ export const MOCK_PRODUCTS: Product[] = [
     ],
     specs: {
       vram: { label: 'VRAM', value: 24, unit: 'ГБ', important: true },
-      power: { label: 'TDP', value: 450, unit: 'Вт' },
+      power: { label: 'TDP', value: 450, unit: '\u0412\u0442' },
     },
     offers: []
   }

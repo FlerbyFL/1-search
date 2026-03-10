@@ -74,8 +74,8 @@ func (w *Worker) parseTarget(t CategoryTarget) {
 		}
 		if len(result.Images) > 0 {
 			imgs := result.Images
-			if len(imgs) > 3 {
-				imgs = imgs[:3]
+			if len(imgs) > 4 {
+				imgs = imgs[:4]
 			}
 			if err := w.database.SaveImages(productID, imgs, w.imagesDir); err != nil {
 				w.logger.Warn("Save images failed", zap.Error(err))

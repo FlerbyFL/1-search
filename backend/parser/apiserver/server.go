@@ -42,6 +42,10 @@ func Run() {
 	}
 	defer database.Close()
 
+	if err := database.Migrate(); err != nil {
+		logger.Fatal("Failed to apply migrations", zap.Error(err))
+	}
+
 	if !*debug {
 		gin.SetMode(gin.ReleaseMode)
 	}

@@ -12,7 +12,7 @@ const ScenarioSelector: React.FC<ScenarioSelectorProps> = ({ scenarios, onSelect
   return (
     <div className="w-full mb-10">
       <div className="flex items-center justify-between mb-4">
-        <h2 className="text-xs font-bold text-slate-400 uppercase tracking-widest">Select Your Use Case</h2>
+        <h2 className="text-xs font-bold text-slate-400 uppercase tracking-widest">Выберите сценарий</h2>
       </div>
       
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">

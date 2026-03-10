@@ -49,15 +49,20 @@ func (p *BrowserParser) ParseCategory(categoryURL string) ([]models.ParseResult,
 	)
 
 	var items []struct {
-		ID       string  `json:"id"`
-		Name     string  `json:"name"`
-		Price    float64 `json:"price"`
-		OldPrice float64 `json:"old_price"`
-		URL      string  `json:"url"`
-		ImageURL string  `json:"image_url"`
-		Brand    string  `json:"brand"`
-		Category string  `json:"category"`
-		InStock  bool    `json:"in_stock"`
+		ID       string   `json:"id"`
+		Name     string   `json:"name"`
+		Price    float64  `json:"price"`
+		OldPrice float64  `json:"old_price"`
+		URL      string   `json:"url"`
+		ImageURL string   `json:"image_url"`
+		Images   []string `json:"images"`
+		Brand    string   `json:"brand"`
+		Category string   `json:"category"`
+		InStock  bool     `json:"in_stock"`
+		Specs    []struct {
+			Name  string `json:"name"`
+			Value string `json:"value"`
+		} `json:"specs"`
 	}
 	if err := json.Unmarshal(out, &items); err != nil {
 		return nil, fmt.Errorf("output parse: %w, got: %.200s", err, string(out))
@@ -84,9 +89,18 @@ func (p *BrowserParser) ParseCategory(categoryURL string) ([]models.ParseResult,
 				Brand:      item.Brand,
 				Category:   item.Category,
 				InStock:    item.InStock,
+				Specs:      map[string]string{},
 			},
 		}
-		if item.ImageURL != "" {
+		for _, spec := range item.Specs {
+			if spec.Name == "" || spec.Value == "" {
+				continue
+			}
+			parsed.Product.Specs[spec.Name] = spec.Value
+		}
+		if len(item.Images) > 0 {
+			parsed.Images = item.Images
+		} else if item.ImageURL != "" {
 			parsed.Images = []string{item.ImageURL}
 		}
 		results = append(results, parsed)

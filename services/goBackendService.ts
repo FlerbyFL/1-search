@@ -1,8 +1,8 @@
 import { Product } from "../types";
 
-const API_BASE = (import.meta.env.VITE_API_BASE_URL || "http://localhost:8080").replace(/\/$/, "");
+const API_BASE = (import.meta.env.VITE_API_BASE_URL || "http://localhost:8081").replace(/\/$/, "");
 const LOCAL_FALLBACK_IMAGE = `data:image/svg+xml;utf8,${encodeURIComponent(
-  '<svg xmlns="http://www.w3.org/2000/svg" width="800" height="600"><rect width="100%" height="100%" fill="#F1F5F9"/><text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle" fill="#64748B" font-family="Arial" font-size="40">No Image</text></svg>'
+  '<svg xmlns="http://www.w3.org/2000/svg" width="800" height="600"><rect width="100%" height="100%" fill="#F1F5F9"/><text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle" fill="#64748B" font-family="Arial" font-size="40">Нет фото</text></svg>'
 )}`;
 
 interface GoApiProduct {
@@ -20,6 +20,9 @@ interface GoApiProduct {
   ReviewCount?: number;
   InStock?: boolean;
   ImageURL?: string;
+  ImageURLs?: string[];
+  image_urls?: string[];
+  images?: string[];
 
   // Backward compatibility fields
   name?: string;
@@ -106,6 +109,28 @@ const normalizeImageUrl = (value: string): string => {
   }
 };
 
+const normalizeImageCollection = (...values: unknown[]): string[] => {
+  const result: string[] = [];
+  const seen = new Set<string>();
+
+  const pushValue = (candidate: unknown) => {
+    const normalized = normalizeImageUrl(readString(candidate));
+    if (!normalized || seen.has(normalized)) return;
+    seen.add(normalized);
+    result.push(normalized);
+  };
+
+  values.forEach((value) => {
+    if (Array.isArray(value)) {
+      value.forEach(pushValue);
+      return;
+    }
+    pushValue(value);
+  });
+
+  return result.slice(0, 4);
+};
+
 const extractCitilinkCode = (externalID: string): string => {
   const safeExternalId = readString(externalID);
   const match = safeExternalId.match(/(\d{5,})/);
@@ -143,11 +168,12 @@ const fixCitilinkProductUrl = (url: string, externalID: string): string => {
 
 const inferProductCategory = (
   name: string
-): "smartphone" | "laptop" | "headphones" | "gpu" | "smartwatch" | "camera" | "tablet" => {
+): "smartphone" | "laptop" | "headphones" | "gpu" | "smartwatch" | "camera" | "tablet" | "tv" => {
   const text = name.toLowerCase();
 
   if (/headphone|earphone|earbud|airpods/i.test(text)) return "headphones";
-  if (/iphone|smartphone|galaxy|pixel|xiaomi|redmi|samsung|poco|realme|honor/i.test(text)) return "smartphone";
+  if (/телевизор|tv|qled|oled|android tv|smart tv/i.test(text)) return "tv";
+  if (/смартфон|телефон|iphone|smartphone|mobile phone/i.test(text)) return "smartphone";
   if (/laptop|macbook|rog|legion|ideapad|vivobook|zenbook|aspire|pavilion/i.test(text)) return "laptop";
   if (/rtx|gtx|radeon|gpu|videocard/i.test(text)) return "gpu";
   if (/watch|smartwatch|apple watch|galaxy watch/i.test(text)) return "smartwatch";
@@ -165,12 +191,13 @@ const normalizeGoProduct = (raw: GoApiProduct) => {
     readString(raw.URL) || readString(raw.url),
     readString(raw.ExternalID)
   );
-  const image = normalizeImageUrl(readString(raw.ImageURL) || readString(raw.image_url));
+  const images = normalizeImageCollection(raw.ImageURLs, raw.image_urls, raw.images, raw.ImageURL, raw.image_url);
+  const image = images[0] || "";
   const rating = readNumber(raw.Rating ?? raw.rating);
   const reviewCount = typeof raw.ReviewCount === "number" ? raw.ReviewCount : raw.review_count ?? 0;
   const available = readBoolean(raw.InStock ?? raw.available, true);
 
-  return { name, price, shop, url, image, rating, reviewCount, available };
+  return { name, price, shop, url, image, images, rating, reviewCount, available };
 };
 
 const extractProducts = (payload: GoSearchResponse | GoProductsResponse): GoApiProduct[] => {
@@ -181,7 +208,7 @@ const extractProducts = (payload: GoSearchResponse | GoProductsResponse): GoApiP
 
 export const convertGoProductToUI = (goProduct: GoApiProduct): Product => {
   const normalized = normalizeGoProduct(goProduct);
-  const safeName = normalized.name || "Unknown product";
+  const safeName = normalized.name || "Неизвестный товар";
   const idSource = readString(goProduct.ExternalID) || `${normalized.shop}-${safeName}-${normalized.price}`;
 
   return {
@@ -189,7 +216,7 @@ export const convertGoProductToUI = (goProduct: GoApiProduct): Product => {
     name: safeName,
     category: inferProductCategory(safeName),
     image: normalized.image || LOCAL_FALLBACK_IMAGE,
-    images: [normalized.image || LOCAL_FALLBACK_IMAGE],
+    images: normalized.images.length > 0 ? normalized.images : [normalized.image || LOCAL_FALLBACK_IMAGE],
     price: Math.round(normalized.price || 0),
     rating: normalized.rating || 4.5,
     reviewCount: normalized.reviewCount || 0,
@@ -201,7 +228,7 @@ export const convertGoProductToUI = (goProduct: GoApiProduct): Product => {
     offers: [
       {
         id: `${idSource}-offer-1`,
-        name: normalized.shop || "Store",
+        name: normalized.shop || "Магазин",
         price: Math.round(normalized.price || 0),
         delivery: "Сегодня",
         rating: normalized.rating || 4.5,

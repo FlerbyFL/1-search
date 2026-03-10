@@ -86,10 +86,42 @@ func (d *DB) Migrate() error {
 			shop        VARCHAR(50) NOT NULL,
 			recorded_at TIMESTAMPTZ DEFAULT NOW()
 		)`,
+		`CREATE TABLE IF NOT EXISTS product_specs (
+			id          BIGSERIAL PRIMARY KEY,
+			product_id  BIGINT NOT NULL REFERENCES products(id) ON DELETE CASCADE,
+			spec_name   TEXT NOT NULL,
+			spec_value  TEXT NOT NULL,
+			created_at  TIMESTAMPTZ DEFAULT NOW(),
+			updated_at  TIMESTAMPTZ DEFAULT NOW(),
+			UNIQUE (product_id, spec_name)
+		)`,
+		`CREATE TABLE IF NOT EXISTS users (
+			id             BIGSERIAL PRIMARY KEY,
+			name           TEXT NOT NULL,
+			email          TEXT NOT NULL,
+			password_hash  TEXT NOT NULL,
+			avatar         TEXT NOT NULL DEFAULT '',
+			cart           JSONB NOT NULL DEFAULT '[]'::jsonb,
+			wishlist       JSONB NOT NULL DEFAULT '[]'::jsonb,
+			history        JSONB NOT NULL DEFAULT '[]'::jsonb,
+			bonuses        INT NOT NULL DEFAULT 0,
+			status         VARCHAR(20) NOT NULL DEFAULT 'Silver',
+			created_at     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+			updated_at     TIMESTAMPTZ NOT NULL DEFAULT NOW()
+		)`,
 		`CREATE INDEX IF NOT EXISTS idx_products_name ON products USING gin(to_tsvector('russian', name))`,
 		`CREATE INDEX IF NOT EXISTS idx_products_shop ON products(shop)`,
 		`CREATE INDEX IF NOT EXISTS idx_products_price ON products(price)`,
+		`DELETE FROM product_images a
+		  USING product_images b
+		 WHERE a.id < b.id
+		   AND a.product_id = b.product_id
+		   AND a.url = b.url`,
+		`CREATE UNIQUE INDEX IF NOT EXISTS idx_product_images_product_url ON product_images(product_id, url)`,
+		`CREATE INDEX IF NOT EXISTS idx_product_images_product_sort ON product_images(product_id, sort_order)`,
 		`CREATE INDEX IF NOT EXISTS idx_price_history_product ON price_history(product_id, recorded_at DESC)`,
+		`CREATE INDEX IF NOT EXISTS idx_product_specs_product ON product_specs(product_id)`,
+		`CREATE UNIQUE INDEX IF NOT EXISTS idx_users_email_lower ON users (LOWER(email))`,
 	}
 
 	for _, q := range queries {
@@ -110,6 +142,14 @@ func min(a, b int) int {
 
 // UpsertProduct inserts or updates a product, returns product ID
 func (d *DB) UpsertProduct(p models.Product) (int64, error) {
+	category := canonicalCategory(p.Category)
+	if category == "" {
+		category = canonicalCategory(p.Name)
+	}
+	if category == "" {
+		category = strings.TrimSpace(p.Category)
+	}
+
 	var id int64
 	err := d.conn.QueryRow(`
 		INSERT INTO products (external_id, name, price, old_price, currency, shop, url, category, brand, rating, review_count, in_stock, updated_at)
@@ -119,13 +159,14 @@ func (d *DB) UpsertProduct(p models.Product) (int64, error) {
 			price        = EXCLUDED.price,
 			old_price    = EXCLUDED.old_price,
 			category     = EXCLUDED.category,
+			brand        = EXCLUDED.brand,
 			in_stock     = EXCLUDED.in_stock,
 			rating       = EXCLUDED.rating,
 			review_count = EXCLUDED.review_count,
 			updated_at   = NOW()
 		RETURNING id`,
 		p.ExternalID, p.Name, p.Price, p.OldPrice, p.Currency,
-		p.Shop, p.URL, p.Category, p.Brand, p.Rating, p.ReviewCount, p.InStock,
+		p.Shop, p.URL, category, p.Brand, p.Rating, p.ReviewCount, p.InStock,
 	).Scan(&id)
 	if err != nil {
 		return 0, fmt.Errorf("upsert product: %w", err)
@@ -139,27 +180,64 @@ func (d *DB) UpsertProduct(p models.Product) (int64, error) {
 		d.logger.Warn("Failed to record price history", zap.Error(err))
 	}
 
+	if len(p.Specs) > 0 {
+		if err := d.SaveProductSpecs(id, p.Specs); err != nil {
+			d.logger.Warn("Failed to save product specs", zap.Error(err), zap.Int64("product_id", id))
+		}
+	}
+
 	return id, nil
 }
 
 // SaveImages downloads and saves product images
 func (d *DB) SaveImages(productID int64, imageURLs []string, imagesDir string) error {
-	// Check if images already exist for this product
-	var count int
-	if err := d.conn.QueryRow(
-		`SELECT COUNT(*) FROM product_images WHERE product_id=$1`, productID,
-	).Scan(&count); err != nil {
-		return err
-	}
-	if count > 0 {
-		return nil // images already saved
+	if len(imageURLs) == 0 {
+		return nil
 	}
 
-	for i, imgURL := range imageURLs {
+	rows, err := d.conn.Query(`SELECT url FROM product_images WHERE product_id=$1`, productID)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+
+	existing := map[string]struct{}{}
+	for rows.Next() {
+		var url string
+		if err := rows.Scan(&url); err != nil {
+			return err
+		}
+		existing[strings.TrimSpace(url)] = struct{}{}
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+
+	var nextSort int
+	if err := d.conn.QueryRow(
+		`SELECT COALESCE(MAX(sort_order), -1) + 1 FROM product_images WHERE product_id=$1`,
+		productID,
+	).Scan(&nextSort); err != nil {
+		return err
+	}
+
+	if len(existing) >= 4 {
+		return nil
+	}
+
+	for _, rawURL := range imageURLs {
+		if len(existing) >= 4 {
+			break
+		}
+		imgURL := strings.TrimSpace(rawURL)
 		if imgURL == "" {
 			continue
 		}
-		localPath, err := downloadImage(imgURL, imagesDir, fmt.Sprintf("%d_%d", productID, i))
+		if _, ok := existing[imgURL]; ok {
+			continue
+		}
+
+		localPath, err := downloadImage(imgURL, imagesDir, fmt.Sprintf("%d_%d", productID, nextSort))
 		if err != nil {
 			d.logger.Warn("Failed to download image", zap.String("url", imgURL), zap.Error(err))
 			localPath = ""
@@ -167,11 +245,18 @@ func (d *DB) SaveImages(productID int64, imageURLs []string, imagesDir string) e
 		if _, err := d.conn.Exec(
 			`INSERT INTO product_images (product_id, url, local_path, is_primary, sort_order) 
 			 VALUES ($1,$2,$3,$4,$5)
-			 ON CONFLICT DO NOTHING`,
-			productID, imgURL, localPath, i == 0, i,
+			 ON CONFLICT (product_id, url) DO UPDATE SET
+			   local_path = CASE
+			     WHEN product_images.local_path = '' OR product_images.local_path IS NULL THEN EXCLUDED.local_path
+			     ELSE product_images.local_path
+			   END`,
+			productID, imgURL, localPath, nextSort == 0, nextSort,
 		); err != nil {
 			d.logger.Warn("Failed to save image record", zap.Error(err))
+			continue
 		}
+		existing[imgURL] = struct{}{}
+		nextSort++
 	}
 	return nil
 }

@@ -9,11 +9,12 @@ import UserDrawer from './components/UserDrawer';
 import AuthScreen from './components/AuthScreen';
 import ScenarioSelector from './components/ScenarioSelector';
 import { searchProductsWithAI } from './services/geminiService';
-import { Search, Bot, BarChart2, X, ArrowRight, ShieldCheck, Sparkles, ShoppingBag, Heart, Star, CheckCircle, Zap, TrendingDown, Truck, ArrowLeft, Filter, ArrowUpRight, Store, Loader2, LogOut } from 'lucide-react';
+import { Search, Bot, BarChart2, X, ArrowRight, ShieldCheck, Sparkles, ShoppingBag, Heart, Star, CheckCircle, Zap, TrendingDown, TrendingUp, Truck, ArrowLeft, Filter, ArrowUpRight, Store, Loader2, LogOut } from 'lucide-react';
 
 const CATEGORY_LABELS: Record<Category, string> = {
   smartphone: 'Смартфоны',
   laptop: 'Ноутбуки',
+  tv: 'Телевизоры',
   tablet: 'Планшеты',
   headphones: 'Наушники',
   smartwatch: 'Смарт-часы',
@@ -23,8 +24,38 @@ const CATEGORY_LABELS: Record<Category, string> = {
 };
 
 const IMAGE_FALLBACK = `data:image/svg+xml;utf8,${encodeURIComponent(
-  '<svg xmlns="http://www.w3.org/2000/svg" width="800" height="600"><rect width="100%" height="100%" fill="#F1F5F9"/><text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle" fill="#64748B" font-family="Arial" font-size="40">No Image</text></svg>'
+  '<svg xmlns="http://www.w3.org/2000/svg" width="800" height="600"><rect width="100%" height="100%" fill="#F1F5F9"/><text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle" fill="#64748B" font-family="Arial" font-size="40">Нет фото</text></svg>'
 )}`;
+
+const normalizeValue = (value: string) => value.trim().toLowerCase();
+
+const getProductBrand = (product: Product): string => {
+  if (product.brand && product.brand.trim()) return product.brand.trim();
+  const [firstWord] = product.name.trim().split(/\s+/);
+  return firstWord || 'Неизвестно';
+};
+
+const hasFastDelivery = (product: Product): boolean =>
+  product.offers.some((offer) => {
+    const delivery = offer.delivery.toLowerCase();
+    return (
+      delivery.includes('сегодня') ||
+      delivery.includes('завтра') ||
+      delivery.includes('today') ||
+      delivery.includes('tomorrow')
+    );
+  });
+
+const hasDiscount = (product: Product): boolean => {
+  if (typeof product.oldPrice === 'number' && product.oldPrice > product.price) return true;
+  return product.offers.some((offer) => typeof offer.oldPrice === 'number' && offer.oldPrice > offer.price);
+};
+
+const getSpecsSearchBlob = (product: Product): string =>
+  Object.values(product.specs)
+    .map((spec) => `${spec.label} ${String(spec.value)} ${spec.unit || ''}`)
+    .join(' ')
+    .toLowerCase();
 
 function App() {
   // Auth State
@@ -45,6 +76,7 @@ function App() {
   const [searchTerm, setSearchTerm] = useState('');
   const [aiRecommendedIds, setAiRecommendedIds] = useState<string[]>([]);
   const [detailTab, setDetailTab] = useState<'overview' | 'reviews'>('overview');
+  const [selectedProductImage, setSelectedProductImage] = useState('');
   
   // App Mode State
   const [viewMode, setViewMode] = useState<'home' | 'results'>('home');
@@ -54,6 +86,15 @@ function App() {
   // Filters State
   const [activeQuickFilter, setActiveQuickFilter] = useState<string | null>(null);
   const [selectedCategories, setSelectedCategories] = useState<Category[]>([]);
+  const [minPriceInput, setMinPriceInput] = useState('');
+  const [maxPriceInput, setMaxPriceInput] = useState('');
+  const [sortBy, setSortBy] = useState<'none' | 'price_asc' | 'price_desc' | 'rating_desc' | 'rating_asc' | 'name_asc'>('none');
+  const [selectedShops, setSelectedShops] = useState<string[]>([]);
+  const [selectedBrands, setSelectedBrands] = useState<string[]>([]);
+  const [minRatingInput, setMinRatingInput] = useState('0');
+  const [specSearchTerm, setSpecSearchTerm] = useState('');
+  const [onlyInStock, setOnlyInStock] = useState(false);
+  const [onlyWithDiscount, setOnlyWithDiscount] = useState(false);
   
   const searchInputRef = useRef<HTMLInputElement>(null);
 
@@ -61,6 +102,7 @@ function App() {
     const stats: Record<Category, number> = {
       smartphone: 0,
       laptop: 0,
+      tv: 0,
       tablet: 0,
       headphones: 0,
       smartwatch: 0,
@@ -76,6 +118,95 @@ function App() {
     return (Object.entries(stats) as Array<[Category, number]>).filter(([, count]) => count > 0);
   }, [products]);
 
+  const shopStats = useMemo(() => {
+    const stats = new Map<string, number>();
+    products.forEach((product) => {
+      const uniqueShops = new Set(product.offers.map((offer) => offer.name).filter(Boolean));
+      uniqueShops.forEach((shop) => {
+        stats.set(shop, (stats.get(shop) || 0) + 1);
+      });
+    });
+    return [...stats.entries()].sort((a, b) => b[1] - a[1]);
+  }, [products]);
+
+  const brandStats = useMemo(() => {
+    const stats = new Map<string, number>();
+    products.forEach((product) => {
+      const brand = getProductBrand(product);
+      stats.set(brand, (stats.get(brand) || 0) + 1);
+    });
+    return [...stats.entries()].sort((a, b) => b[1] - a[1]);
+  }, [products]);
+
+  const priceBounds = useMemo(() => {
+    if (products.length === 0) return null;
+    const prices = products.map((product) => product.price);
+    return { min: Math.min(...prices), max: Math.max(...prices) };
+  }, [products]);
+
+  const normalizedPriceRange = useMemo(() => {
+    const min = minPriceInput.trim() ? Number(minPriceInput) : null;
+    const max = maxPriceInput.trim() ? Number(maxPriceInput) : null;
+
+    if (min !== null && max !== null && min > max) {
+      return { min: max, max: min, isSwapped: true };
+    }
+
+    return { min, max, isSwapped: false };
+  }, [minPriceInput, maxPriceInput]);
+
+  const normalizedMinRating = useMemo(() => {
+    const rating = Number(minRatingInput);
+    if (!Number.isFinite(rating)) return 0;
+    return Math.max(0, Math.min(5, rating));
+  }, [minRatingInput]);
+
+  const activeFilterCount = useMemo(() => {
+    let count = selectedCategories.length;
+    if (activeQuickFilter) count += 1;
+    if (normalizedPriceRange.min !== null || normalizedPriceRange.max !== null) count += 1;
+    if (sortBy !== 'none') count += 1;
+    if (selectedShops.length > 0) count += 1;
+    if (selectedBrands.length > 0) count += 1;
+    if (normalizedMinRating > 0) count += 1;
+    if (specSearchTerm.trim()) count += 1;
+    if (onlyInStock) count += 1;
+    if (onlyWithDiscount) count += 1;
+    return count;
+  }, [
+    selectedCategories.length,
+    activeQuickFilter,
+    normalizedPriceRange,
+    sortBy,
+    selectedShops.length,
+    selectedBrands.length,
+    normalizedMinRating,
+    specSearchTerm,
+    onlyInStock,
+    onlyWithDiscount,
+  ]);
+
+  const resetFilters = () => {
+    setActiveQuickFilter(null);
+    setSelectedCategories([]);
+    setSelectedShops([]);
+    setSelectedBrands([]);
+    setMinPriceInput('');
+    setMaxPriceInput('');
+    setMinRatingInput('0');
+    setSpecSearchTerm('');
+    setOnlyInStock(false);
+    setOnlyWithDiscount(false);
+    setSortBy('none');
+  };
+
+  const handlePriceInputChange = (
+    event: React.ChangeEvent<HTMLInputElement>,
+    setter: React.Dispatch<React.SetStateAction<string>>
+  ) => {
+    setter(event.target.value.replace(/[^\d]/g, ''));
+  };
+
   // Check for existing session
   useEffect(() => {
     const storedUser = localStorage.getItem('nex_current_user');
@@ -90,6 +221,11 @@ function App() {
     }
   }, []);
 
+  useEffect(() => {
+    if (!user) return;
+    localStorage.setItem('nex_current_user', JSON.stringify(user));
+  }, [user]);
+
   // Placeholder Animation
   useEffect(() => {
     const placeholders = ['iPhone 15...', 'Игровой ноутбук...', 'Sony наушники...', 'RTX 4090...'];
@@ -100,39 +236,140 @@ function App() {
     }, 3000);
     return () => clearInterval(interval);
   }, []);
-
   // Filtering Logic (Client Side)
   useEffect(() => {
-    if (!searchTerm && !isSearching) {
-       if (viewMode === 'home') setFilteredProducts(MOCK_PRODUCTS); 
-       else setFilteredProducts(products);
-       return;
+    const hasPriceRangeFilter = normalizedPriceRange.min !== null || normalizedPriceRange.max !== null;
+    const hasSpecSearch = specSearchTerm.trim().length > 0;
+    const hasAnyFilters =
+      selectedCategories.length > 0 ||
+      selectedShops.length > 0 ||
+      selectedBrands.length > 0 ||
+      normalizedMinRating > 0 ||
+      hasSpecSearch ||
+      onlyInStock ||
+      onlyWithDiscount ||
+      Boolean(activeQuickFilter) ||
+      hasPriceRangeFilter ||
+      sortBy !== 'none';
+
+    if (!searchTerm && !isSearching && !hasAnyFilters) {
+      if (viewMode === 'home') setFilteredProducts(MOCK_PRODUCTS);
+      else setFilteredProducts(products);
+      return;
     }
 
     let result = products;
 
     if (searchTerm && !isSearching && viewMode === 'home') {
-      result = result.filter(p => p.name.toLowerCase().includes(searchTerm.toLowerCase()));
+      result = result.filter((p) => p.name.toLowerCase().includes(searchTerm.toLowerCase()));
     }
 
     if (selectedCategories.length > 0) {
       result = result.filter((p) => selectedCategories.includes(p.category));
     }
 
+    if (selectedShops.length > 0) {
+      const normalizedShops = selectedShops.map(normalizeValue);
+      result = result.filter((product) =>
+        product.offers.some((offer) => normalizedShops.includes(normalizeValue(offer.name)))
+      );
+    }
+
+    if (selectedBrands.length > 0) {
+      const normalizedBrands = selectedBrands.map(normalizeValue);
+      result = result.filter((product) => normalizedBrands.includes(normalizeValue(getProductBrand(product))));
+    }
+
+    if (hasPriceRangeFilter) {
+      result = result.filter((p) => {
+        const isAboveMin = normalizedPriceRange.min === null || p.price >= normalizedPriceRange.min;
+        const isBelowMax = normalizedPriceRange.max === null || p.price <= normalizedPriceRange.max;
+        return isAboveMin && isBelowMax;
+      });
+    }
+
+    if (normalizedMinRating > 0) {
+      result = result.filter((product) => product.rating >= normalizedMinRating);
+    }
+
+    if (hasSpecSearch) {
+      const specNeedle = specSearchTerm.trim().toLowerCase();
+      result = result.filter((product) => getSpecsSearchBlob(product).includes(specNeedle));
+    }
+
+    if (onlyInStock) {
+      result = result.filter((product) => product.inStock !== false);
+    }
+
+    if (onlyWithDiscount) {
+      result = result.filter((product) => hasDiscount(product));
+    }
+
     if (activeQuickFilter) {
       if (activeQuickFilter === 'price_low') result = [...result].sort((a, b) => a.price - b.price);
+      if (activeQuickFilter === 'price_high') result = [...result].sort((a, b) => b.price - a.price);
       if (activeQuickFilter === 'rating') result = [...result].sort((a, b) => b.rating - a.rating);
       if (activeQuickFilter === 'delivery') {
-         result = result.filter(p => p.offers.some(o => o.delivery.toLowerCase().includes('завтра') || o.delivery.toLowerCase().includes('сегодня')));
+        result = result.filter((product) => hasFastDelivery(product));
+      }
+      if (activeQuickFilter === 'deals') {
+        result = result.filter((product) => hasDiscount(product));
       }
     }
 
+    switch (sortBy) {
+      case 'price_asc':
+        result = [...result].sort((a, b) => a.price - b.price);
+        break;
+      case 'price_desc':
+        result = [...result].sort((a, b) => b.price - a.price);
+        break;
+      case 'rating_desc':
+        result = [...result].sort((a, b) => b.rating - a.rating);
+        break;
+      case 'rating_asc':
+        result = [...result].sort((a, b) => a.rating - b.rating);
+        break;
+      case 'name_asc':
+        result = [...result].sort((a, b) => a.name.localeCompare(b.name, 'ru'));
+        break;
+      default:
+        break;
+    }
+
     setFilteredProducts(result);
-  }, [searchTerm, products, activeQuickFilter, selectedCategories, isSearching, viewMode]);
+  }, [
+    searchTerm,
+    products,
+    activeQuickFilter,
+    selectedCategories,
+    selectedShops,
+    selectedBrands,
+    normalizedPriceRange,
+    normalizedMinRating,
+    specSearchTerm,
+    onlyInStock,
+    onlyWithDiscount,
+    sortBy,
+    isSearching,
+    viewMode,
+  ]);
 
   const toggleCategoryFilter = (category: Category) => {
     setSelectedCategories((prev) =>
       prev.includes(category) ? prev.filter((c) => c !== category) : [...prev, category]
+    );
+  };
+
+  const toggleShopFilter = (shop: string) => {
+    setSelectedShops((prev) =>
+      prev.includes(shop) ? prev.filter((value) => value !== shop) : [...prev, shop]
+    );
+  };
+
+  const toggleBrandFilter = (brand: string) => {
+    setSelectedBrands((prev) =>
+      prev.includes(brand) ? prev.filter((value) => value !== brand) : [...prev, brand]
     );
   };
 
@@ -157,8 +394,25 @@ function App() {
         });
     }
     setSelectedProduct(product);
+    setSelectedProductImage(product.images?.[0] || product.image || IMAGE_FALLBACK);
     setDetailTab('overview');
   };
+
+  const selectedProductGallery = useMemo(() => {
+    if (!selectedProduct) return [];
+
+    const unique = new Set<string>();
+    const gallery = [selectedProduct.image, ...(selectedProduct.images || [])]
+      .map((src) => src?.trim())
+      .filter((src): src is string => Boolean(src))
+      .filter((src) => {
+        if (unique.has(src)) return false;
+        unique.add(src);
+        return true;
+      });
+
+    return gallery.length > 0 ? gallery : [IMAGE_FALLBACK];
+  }, [selectedProduct]);
 
   const handleToggleLike = (e: React.MouseEvent, product: Product) => {
     e.stopPropagation();
@@ -195,9 +449,9 @@ function App() {
     if (!searchTerm.trim()) return;
 
     setViewMode('results');
-    setSelectedCategories([]);
+    resetFilters();
     setIsSearching(true);
-    setSearchStatus('Анализируем интернет-магазины...');
+    setSearchStatus('Анализируем предложения магазинов...');
     
     const results = await searchProductsWithAI(searchTerm);
     
@@ -243,7 +497,7 @@ function App() {
       {/* Navbar */}
       <header className={`fixed top-0 inset-x-0 h-16 z-40 transition-all duration-500 ${viewMode === 'results' ? 'bg-white/80 backdrop-blur-xl border-b border-slate-200' : 'bg-transparent'}`}>
         <div className="max-w-7xl mx-auto px-4 h-full flex items-center justify-between">
-          <div className="flex items-center gap-2 cursor-pointer" onClick={() => { setViewMode('home'); setSearchTerm(''); setProducts(MOCK_PRODUCTS); setSelectedCategories([]); }}>
+          <div className="flex items-center gap-2 cursor-pointer" onClick={() => { setViewMode('home'); setSearchTerm(''); setProducts(MOCK_PRODUCTS); resetFilters(); }}>
             <div className="w-8 h-8 bg-slate-900 rounded-lg flex items-center justify-center text-lime-400 font-bold shadow-lg shadow-slate-900/20">
               1S
             </div>
@@ -333,9 +587,10 @@ function App() {
               <div className="flex flex-wrap items-center justify-center gap-3">
                  {[
                     { id: 'price_low', label: 'Низкая цена', icon: <TrendingDown size={14} /> },
-                    { id: 'delivery', label: 'Быстро', icon: <Truck size={14} /> },
+                    { id: 'price_high', label: 'Высокая цена', icon: <TrendingUp size={14} /> },
+                    { id: 'delivery', label: 'Быстрая доставка', icon: <Truck size={14} /> },
                     { id: 'rating', label: 'Рейтинг', icon: <Star size={14} /> },
-                    { id: 'deals', label: "Скидки дня", icon: <Zap size={14} /> }
+                    { id: 'deals', label: 'Скидки', icon: <Zap size={14} /> }
                  ].map(filter => (
                     <button 
                        key={filter.id}
@@ -358,17 +613,137 @@ function App() {
       {viewMode === 'results' && (
         <main className="pt-24 pb-20 max-w-[1600px] mx-auto px-4 md:px-8 flex gap-8">
            <div className="hidden lg:block w-64 flex-shrink-0 sticky top-24 h-[calc(100vh-8rem)]">
-              <div className="bg-white rounded-2xl p-6 border border-slate-100 shadow-sm">
-                 <div className="flex items-center gap-2 mb-6 text-slate-900 font-bold">
-                    <Filter size={18} /> Фильтры
+              <div className="bg-white rounded-2xl p-6 border border-slate-100 shadow-sm h-full flex flex-col overflow-hidden">
+                 <div className="flex items-center justify-between mb-6">
+                    <div className="flex items-center gap-2 text-slate-900 font-bold">
+                      <Filter size={18} /> Фильтры
+
+                    </div>
+                    {activeFilterCount > 0 && (
+                      <button
+                        type="button"
+                        onClick={resetFilters}
+                        className="text-[11px] text-slate-500 hover:text-slate-700"
+                      >
+                        Сбросить все
+
+                      </button>
+                    )}
                  </div>
-                 <div className="space-y-6">
+                 <div className="space-y-6 overflow-y-auto pr-1 custom-scrollbar min-h-0">
                     <div>
-                       <label className="text-xs font-bold text-slate-500 uppercase mb-3 block">Цена</label>
-                       <input type="range" className="w-full accent-slate-900 h-1 bg-slate-200 rounded-lg appearance-none cursor-pointer" />
-                       <div className="flex justify-between text-xs text-slate-500 mt-2">
-                          <span>0 ₽</span>
-                          <span>300 000+ ₽</span>
+                       <label className="text-xs font-bold text-slate-500 uppercase mb-3 block">Цена, ₽</label>
+                       <div className="grid grid-cols-2 gap-2">
+                         <input
+                           type="text"
+                           inputMode="numeric"
+                           placeholder="От"
+                           value={minPriceInput}
+                           onChange={(event) => handlePriceInputChange(event, setMinPriceInput)}
+                           className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-slate-900/10 focus:border-slate-300"
+                         />
+                         <input
+                           type="text"
+                           inputMode="numeric"
+                           placeholder="До"
+                           value={maxPriceInput}
+                           onChange={(event) => handlePriceInputChange(event, setMaxPriceInput)}
+                           className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-slate-900/10 focus:border-slate-300"
+                         />
+                       </div>
+                       <div className="flex justify-between text-xs text-slate-500 mt-2 gap-2">
+                          <span>Показанный диапазон цен</span>
+                          <span className="text-right text-slate-600 font-medium">
+                            {priceBounds ? `${formatPrice(priceBounds.min)} - ${formatPrice(priceBounds.max)} ₽` : '--'}
+                          </span>
+                       </div>
+                       {normalizedPriceRange.isSwapped && (
+                         <p className="text-[11px] text-amber-600 mt-2">Минимум и максимум были автоматически поменяны местами.</p>
+                       )}
+                    </div>
+                    <div>
+                       <label className="text-xs font-bold text-slate-500 uppercase mb-3 block">Сортировка</label>
+                       <select
+                         value={sortBy}
+                         onChange={(event) =>
+                           setSortBy(
+                             event.target.value as
+                               | 'none'
+                               | 'price_asc'
+                               | 'price_desc'
+                               | 'rating_desc'
+                               | 'rating_asc'
+                               | 'name_asc'
+                           )
+                         }
+                         className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900 bg-white focus:outline-none focus:ring-2 focus:ring-slate-900/10 focus:border-slate-300"
+                       >
+                         <option value="none">По умолчанию</option>
+                         <option value="price_asc">Цена: по возрастанию</option>
+                         <option value="price_desc">Цена: по убыванию</option>
+                         <option value="rating_desc">Рейтинг: по убыванию</option>
+                         <option value="rating_asc">Рейтинг: по возрастанию</option>
+                         <option value="name_asc">Название (А-Я)</option>
+                       </select>
+                    </div>
+                    <div>
+                       <label className="text-xs font-bold text-slate-500 uppercase mb-2 block">Минимальный рейтинг</label>
+                       <input
+                         type="number"
+                         min={0}
+                         max={5}
+                         step={0.1}
+                         value={minRatingInput}
+                         onChange={(event) => setMinRatingInput(event.target.value.replace(',', '.'))}
+                         className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900 bg-white focus:outline-none focus:ring-2 focus:ring-slate-900/10 focus:border-slate-300"
+                       />
+                    </div>
+                    <div>
+                       <label className="text-xs font-bold text-slate-500 uppercase mb-2 block">Поиск по характеристикам</label>
+                       <input
+                         type="text"
+                         value={specSearchTerm}
+                         onChange={(event) => setSpecSearchTerm(event.target.value)}
+                         placeholder="Например: OLED, 16 ГБ, RTX"
+                         className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-slate-900/10 focus:border-slate-300"
+                       />
+                    </div>
+                    <div className="space-y-2">
+                       <label className="flex items-center justify-between text-sm text-slate-700 cursor-pointer">
+                         <span className="flex items-center gap-2">
+                           <input
+                             type="checkbox"
+                             className="rounded border-slate-300 text-slate-900 focus:ring-slate-900"
+                             checked={onlyInStock}
+                             onChange={() => setOnlyInStock((prev) => !prev)}
+                           />
+                           Только в наличии
+
+                         </span>
+                       </label>
+                       <label className="flex items-center justify-between text-sm text-slate-700 cursor-pointer">
+                         <span className="flex items-center gap-2">
+                           <input
+                             type="checkbox"
+                             className="rounded border-slate-300 text-slate-900 focus:ring-slate-900"
+                             checked={onlyWithDiscount}
+                             onChange={() => setOnlyWithDiscount((prev) => !prev)}
+                           />
+                           Только со скидкой
+
+                         </span>
+                       </label>
+                    </div>
+                    <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
+                       <div className="flex items-center justify-between text-xs text-slate-500">
+                         <span>Активные фильтры</span>
+
+                         <span className="font-bold text-slate-700">{activeFilterCount}</span>
+                       </div>
+                       <div className="flex items-center justify-between text-xs text-slate-500 mt-1">
+                         <span>Товаров после фильтрации</span>
+
+                         <span className="font-bold text-slate-700">{filteredProducts.length}</span>
                        </div>
                     </div>
                     <div>
@@ -381,6 +756,7 @@ function App() {
                               className="text-[11px] text-slate-500 hover:text-slate-700"
                             >
                               Сбросить
+
                             </button>
                           )}
                        </div>
@@ -402,6 +778,68 @@ function App() {
                           {categoryStats.length === 0 && (
                             <div className="text-xs text-slate-400">Категории появятся после поиска.</div>
                           )}
+                       </div>
+                    </div>
+                    <div>
+                       <div className="flex items-center justify-between mb-3">
+                          <label className="text-xs font-bold text-slate-500 uppercase">Бренды</label>
+                          {selectedBrands.length > 0 && (
+                            <button
+                              type="button"
+                              onClick={() => setSelectedBrands([])}
+                              className="text-[11px] text-slate-500 hover:text-slate-700"
+                            >
+                              Сбросить
+
+                            </button>
+                          )}
+                       </div>
+                       <div className="space-y-2 max-h-40 overflow-y-auto pr-1">
+                          {brandStats.map(([brand, count]) => (
+                             <label key={brand} className="flex items-center justify-between gap-3 text-sm text-slate-700 cursor-pointer hover:text-slate-900">
+                                <span className="flex items-center gap-2">
+                                  <input
+                                    type="checkbox"
+                                    className="rounded border-slate-300 text-slate-900 focus:ring-slate-900"
+                                    checked={selectedBrands.includes(brand)}
+                                    onChange={() => toggleBrandFilter(brand)}
+                                  />
+                                  {brand}
+                                </span>
+                                <span className="text-xs text-slate-400">{count}</span>
+                             </label>
+                          ))}
+                       </div>
+                    </div>
+                    <div>
+                       <div className="flex items-center justify-between mb-3">
+                          <label className="text-xs font-bold text-slate-500 uppercase">Магазины</label>
+                          {selectedShops.length > 0 && (
+                            <button
+                              type="button"
+                              onClick={() => setSelectedShops([])}
+                              className="text-[11px] text-slate-500 hover:text-slate-700"
+                            >
+                              Сбросить
+
+                            </button>
+                          )}
+                       </div>
+                       <div className="space-y-2 max-h-40 overflow-y-auto pr-1">
+                          {shopStats.map(([shop, count]) => (
+                             <label key={shop} className="flex items-center justify-between gap-3 text-sm text-slate-700 cursor-pointer hover:text-slate-900">
+                                <span className="flex items-center gap-2">
+                                  <input
+                                    type="checkbox"
+                                    className="rounded border-slate-300 text-slate-900 focus:ring-slate-900"
+                                    checked={selectedShops.includes(shop)}
+                                    onChange={() => toggleShopFilter(shop)}
+                                  />
+                                  {shop}
+                                </span>
+                                <span className="text-xs text-slate-400">{count}</span>
+                             </label>
+                          ))}
                        </div>
                     </div>
                  </div>
@@ -426,7 +864,8 @@ function App() {
                              <Sparkles size={16} />
                           </div>
                           <span className="text-sm font-medium">
-                             Мы нашли <strong>{filteredProducts.length}</strong> актуальных предложений из интернета.
+                             Найдено <strong>{filteredProducts.length}</strong> актуальных предложений из интернет-магазинов.
+
                           </span>
                        </div>
                     </div>
@@ -450,7 +889,8 @@ function App() {
                   {filteredProducts.length === 0 && (
                      <div className="text-center py-20">
                         <p className="text-slate-400 text-lg">По запросу "{searchTerm}" ничего не найдено</p>
-                        <button onClick={() => { setSearchTerm(''); setViewMode('home'); }} className="mt-4 text-lime-600 hover:underline">Вернуться назад</button>
+                        <button onClick={() => { setSearchTerm(''); setViewMode('home'); }} className="mt-4 text-lime-600 hover:underline">На главную</button>
+
                      </div>
                   )}
                 </>
@@ -492,7 +932,13 @@ function App() {
       {/* Product Detail Modal - IMPROVED SCROLLING ARCHITECTURE */}
       {selectedProduct && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6">
-          <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm transition-opacity" onClick={() => setSelectedProduct(null)} />
+          <div
+            className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm transition-opacity"
+            onClick={() => {
+              setSelectedProduct(null);
+              setSelectedProductImage('');
+            }}
+          />
           
           <div className="relative bg-white rounded-3xl w-full max-w-6xl shadow-2xl flex flex-col md:flex-row animate-in zoom-in-95 duration-200 overflow-hidden h-[90vh] md:h-[85vh]">
              
@@ -501,13 +947,16 @@ function App() {
              <div className="h-[40%] md:h-full w-full md:w-5/12 bg-slate-50 border-b md:border-b-0 md:border-r border-slate-100 flex flex-col overflow-y-auto custom-scrollbar flex-shrink-0">
                 <div className="p-8 aspect-square flex items-center justify-center relative bg-white flex-shrink-0 border-b border-slate-50">
                     <button 
-                       onClick={() => setSelectedProduct(null)} 
+                       onClick={() => {
+                         setSelectedProduct(null);
+                         setSelectedProductImage('');
+                       }}
                        className="absolute top-4 left-4 p-2 bg-slate-100 hover:bg-slate-200 rounded-full text-slate-600 md:hidden z-10"
                     >
                        <X size={20} />
                     </button>
                     <img 
-                       src={selectedProduct.image} 
+                       src={selectedProductImage || selectedProductGallery[0]} 
                        alt={selectedProduct.name} 
                        className="w-full h-full object-contain mix-blend-multiply" 
                        onError={(e) => {
@@ -518,9 +967,40 @@ function App() {
                     />
                 </div>
 
+                {selectedProductGallery.length > 1 && (
+                  <div className="px-6 pt-4 pb-2 border-b border-slate-100 bg-white">
+                    <div className="grid grid-cols-4 gap-2">
+                      {selectedProductGallery.slice(0, 4).map((imageSrc, index) => {
+                        const isActive = (selectedProductImage || selectedProductGallery[0]) === imageSrc;
+                        return (
+                          <button
+                            key={`${selectedProduct.id}-thumb-${index}`}
+                            type="button"
+                            onClick={() => setSelectedProductImage(imageSrc)}
+                            className={`aspect-square rounded-lg overflow-hidden border transition ${
+                              isActive ? 'border-slate-900 shadow-sm' : 'border-slate-200 hover:border-slate-300'
+                            }`}
+                          >
+                            <img
+                              src={imageSrc}
+                              alt={`${selectedProduct.name} ${index + 1}`}
+                              className="w-full h-full object-cover"
+                              onError={(e) => {
+                                if (e.currentTarget.src !== IMAGE_FALLBACK) {
+                                  e.currentTarget.src = IMAGE_FALLBACK;
+                                }
+                              }}
+                            />
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
                 <div className="p-6">
                    <h3 className="text-sm font-bold text-slate-900 uppercase mb-4 flex items-center gap-2">
-                      <ShoppingBag size={16} /> Наличие в магазинах
+                      <ShoppingBag size={16} /> Доступно в магазинах
                    </h3>
                    <div className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-sm">
                       {selectedProduct.offers.map((offer, idx) => (
@@ -560,7 +1040,9 @@ function App() {
                       <div>
                          <h2 className="text-3xl font-bold text-slate-900 mb-2">{selectedProduct.name}</h2>
                          <div className="flex items-center gap-2">
-                            <span className="bg-slate-100 text-slate-600 px-2 py-1 rounded text-xs font-bold uppercase">{selectedProduct.category}</span>
+                            <span className="bg-slate-100 text-slate-600 px-2 py-1 rounded text-xs font-bold uppercase">
+                              {CATEGORY_LABELS[selectedProduct.category] || selectedProduct.category}
+                            </span>
                             <div className="flex items-center gap-1 text-yellow-500">
                                <Star size={14} fill="currentColor" />
                                {/* PRECISE RATING TO 2 DECIMALS */}
@@ -590,7 +1072,8 @@ function App() {
                             <TrendingDown className="text-lime-600 mt-1" size={20} />
                             <div>
                                <h4 className="font-bold text-lime-900 text-sm">Аналитика цены</h4>
-                               <p className="text-sm text-lime-700">Цена снизилась на ~5% за последнюю неделю. Выгодное время для покупки.</p>
+                               <p className="text-sm text-lime-700">Цена снизилась примерно на 5% за последнюю неделю. Хороший момент для покупки.</p>
+
                             </div>
                          </div>
 
@@ -606,14 +1089,18 @@ function App() {
                          
                          <div>
                             <h4 className="font-bold text-slate-900 uppercase text-xs mb-3">Характеристики</h4>
-                            <div className="grid grid-cols-2 gap-3">
-                               {(Object.values(selectedProduct.specs) as Spec[]).filter(s => s.important).map((spec, i) => (
-                                  <div key={i} className="p-3 bg-slate-50 rounded-lg border border-slate-100">
-                                     <div className="text-xs text-slate-500 uppercase">{spec.label}</div>
-                                     <div className="font-bold text-slate-900">{spec.value.toString()} {spec.unit}</div>
-                                  </div>
-                               ))}
-                            </div>
+                            {(Object.values(selectedProduct.specs) as Spec[]).length > 0 ? (
+                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                 {(Object.values(selectedProduct.specs) as Spec[]).map((spec, i) => (
+                                    <div key={i} className="p-3 bg-slate-50 rounded-lg border border-slate-100">
+                                       <div className="text-xs text-slate-500 uppercase">{spec.label}</div>
+                                       <div className="font-bold text-slate-900 break-words">{spec.value.toString()} {spec.unit}</div>
+                                    </div>
+                                 ))}
+                              </div>
+                            ) : (
+                              <div className="text-sm text-slate-400">Характеристики временно недоступны.</div>
+                            )}
                          </div>
 
                          <PriceHistoryChart data={selectedProduct.priceHistory} />
@@ -642,7 +1129,7 @@ function App() {
                          ))}
                          {selectedProduct.reviews.length === 0 && (
                             <div className="text-center py-10 text-slate-400">
-                               Нет отзывов.
+                               Отзывов пока нет.
                             </div>
                          )}
                       </div>
@@ -658,12 +1145,18 @@ function App() {
                      onClick={() => handleGoToStore(selectedProduct.offers[0].url)}
                      className="bg-slate-900 hover:bg-slate-800 text-white px-8 py-4 rounded-xl font-bold shadow-lg shadow-slate-900/10 flex items-center gap-2"
                    >
-                      В магазин <ArrowRight size={18} />
+                      Перейти в магазин <ArrowRight size={18} />
                    </button>
                 </div>
              </div>
 
-             <button onClick={() => setSelectedProduct(null)} className="absolute top-4 right-4 p-2 bg-slate-100 hover:bg-slate-200 rounded-full text-slate-500 hidden md:block z-50">
+             <button
+               onClick={() => {
+                 setSelectedProduct(null);
+                 setSelectedProductImage('');
+               }}
+               className="absolute top-4 right-4 p-2 bg-slate-100 hover:bg-slate-200 rounded-full text-slate-500 hidden md:block z-50"
+             >
                 <X size={20} />
              </button>
           </div>
@@ -679,3 +1172,4 @@ function App() {
 }
 
 export default App;
+

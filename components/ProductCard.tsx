@@ -3,7 +3,7 @@ import { Product } from '../types';
 import { BarChart2, Check, Star, ArrowUpRight, Heart, Truck } from 'lucide-react';
 
 const IMAGE_FALLBACK = `data:image/svg+xml;utf8,${encodeURIComponent(
-  '<svg xmlns="http://www.w3.org/2000/svg" width="800" height="600"><rect width="100%" height="100%" fill="#F1F5F9"/><text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle" fill="#64748B" font-family="Arial" font-size="40">No Image</text></svg>'
+  '<svg xmlns="http://www.w3.org/2000/svg" width="800" height="600"><rect width="100%" height="100%" fill="#F1F5F9"/><text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle" fill="#64748B" font-family="Arial" font-size="40">Нет фото</text></svg>'
 )}`;
 
 interface ProductCardProps {
@@ -18,6 +18,7 @@ interface ProductCardProps {
 
 const ProductCard: React.FC<ProductCardProps> = ({ product, onCompare, isCompared, onSelect, highlight, isLiked, onToggleLike }) => {
   const bestOffer = product.offers[0];
+  const specs = Object.values(product.specs || {});
 
   const formatPrice = (price: number) => {
     return price.toLocaleString('ru-RU');
@@ -68,7 +69,7 @@ const ProductCard: React.FC<ProductCardProps> = ({ product, onCompare, isCompare
         />
         {highlight && (
            <div className="absolute top-3 left-3 bg-lime-400 text-slate-900 text-[10px] font-bold px-2 py-1 rounded uppercase tracking-wider shadow-sm">
-              Best Match
+              Лучший выбор
            </div>
         )}
       </div>
@@ -109,10 +110,21 @@ const ProductCard: React.FC<ProductCardProps> = ({ product, onCompare, isCompare
            ))}
         </div>
 
+        {specs.length > 0 && (
+          <div className="mb-4 rounded-lg border border-slate-100 bg-slate-50/80 p-2.5 space-y-1.5">
+            {specs.map((spec, idx) => (
+              <div key={`${spec.label}-${idx}`} className="flex items-start justify-between gap-2 text-[11px] leading-tight">
+                <span className="text-slate-500">{spec.label}</span>
+                <span className="text-slate-700 font-medium text-right">{String(spec.value)} {spec.unit || ''}</span>
+              </div>
+            ))}
+          </div>
+        )}
+
         <div className="mt-auto pt-4 border-t border-slate-100 flex items-center justify-between">
            <div>
               <div className="flex items-center gap-1.5 text-[10px] text-green-600 font-medium bg-green-50 px-2 py-0.5 rounded-full w-fit mb-1">
-                 <Truck size={10} /> {bestOffer?.delivery || 'Fast Delivery'}
+                 <Truck size={10} /> {bestOffer?.delivery || 'Быстрая доставка'}
               </div>
               <div className="text-lg font-bold text-slate-900">{formatPrice(product.price)} ₽</div>
            </div>
