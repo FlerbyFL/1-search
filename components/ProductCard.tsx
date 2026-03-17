@@ -19,6 +19,7 @@ interface ProductCardProps {
 const ProductCard: React.FC<ProductCardProps> = ({ product, onCompare, isCompared, onSelect, highlight, isLiked, onToggleLike }) => {
   const bestOffer = product.offers[0];
   const specs = Object.values(product.specs || {});
+  const displayedSpecs = specs.slice(0, 6);
 
   const formatPrice = (price: number) => {
     return price.toLocaleString('ru-RU');
@@ -27,7 +28,7 @@ const ProductCard: React.FC<ProductCardProps> = ({ product, onCompare, isCompare
   return (
     <div 
       className={`
-        group relative bg-white rounded-2xl transition-all duration-300 flex flex-col overflow-hidden
+        group relative bg-white rounded-2xl transition-all duration-300 flex flex-col overflow-hidden h-[640px] md:h-[660px] 2xl:h-[680px]
         ${highlight 
           ? 'ring-2 ring-lime-400 shadow-2xl shadow-lime-500/10 scale-[1.02]' 
           : 'border border-slate-100 shadow-sm hover:shadow-xl hover:-translate-y-1'
@@ -56,7 +57,7 @@ const ProductCard: React.FC<ProductCardProps> = ({ product, onCompare, isCompare
       </div>
 
       {/* Image Container */}
-      <div className="relative aspect-[4/3] bg-white p-6 flex items-center justify-center border-b border-slate-50">
+      <div className="relative h-48 md:h-52 bg-white p-4 flex items-center justify-center border-b border-slate-50">
         <img 
           src={product.image} 
           alt={product.name} 
@@ -112,9 +113,9 @@ const ProductCard: React.FC<ProductCardProps> = ({ product, onCompare, isCompare
            ))}
         </div>
 
-        {specs.length > 0 && (
-          <div className="mb-4 rounded-lg border border-slate-100 bg-slate-50/80 p-2.5 space-y-1.5">
-            {specs.map((spec, idx) => (
+        {displayedSpecs.length > 0 && (
+          <div className="mb-4 rounded-lg border border-slate-100 bg-slate-50/80 p-2.5 space-y-1.5 max-h-[140px] overflow-hidden">
+            {displayedSpecs.map((spec, idx) => (
               <div key={`${spec.label}-${idx}`} className="flex items-start justify-between gap-2 text-[11px] leading-tight">
                 <span className="text-slate-500">{spec.label}</span>
                 <span className="text-slate-700 font-medium text-right">{String(spec.value)} {spec.unit || ''}</span>
