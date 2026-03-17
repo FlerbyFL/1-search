@@ -60,6 +60,8 @@ const ProductCard: React.FC<ProductCardProps> = ({ product, onCompare, isCompare
         <img 
           src={product.image} 
           alt={product.name} 
+          loading="lazy"
+          decoding="async"
           className="object-contain w-full h-full mix-blend-multiply transition-transform duration-500 group-hover:scale-105"
           onError={(e) => {
             if (e.currentTarget.src !== IMAGE_FALLBACK) {

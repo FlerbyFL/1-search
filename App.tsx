@@ -27,6 +27,8 @@ const IMAGE_FALLBACK = `data:image/svg+xml;utf8,${encodeURIComponent(
   '<svg xmlns="http://www.w3.org/2000/svg" width="800" height="600"><rect width="100%" height="100%" fill="#F1F5F9"/><text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle" fill="#64748B" font-family="Arial" font-size="40">Нет фото</text></svg>'
 )}`;
 
+const PAGE_SIZE = 48;
+
 const normalizeValue = (value: string) => value.trim().toLowerCase();
 
 const getProductBrand = (product: Product): string => {
@@ -65,6 +67,7 @@ function App() {
   // Data State
   const [products, setProducts] = useState<Product[]>(MOCK_PRODUCTS);
   const [filteredProducts, setFilteredProducts] = useState<Product[]>(MOCK_PRODUCTS);
+  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
   const [isSearching, setIsSearching] = useState(false);
   const [searchStatus, setSearchStatus] = useState('');
   
@@ -354,6 +357,31 @@ function App() {
     isSearching,
     viewMode,
   ]);
+
+  useEffect(() => {
+    setVisibleCount(PAGE_SIZE);
+  }, [
+    searchTerm,
+    selectedCategories,
+    selectedShops,
+    selectedBrands,
+    minPriceInput,
+    maxPriceInput,
+    minRatingInput,
+    specSearchTerm,
+    onlyInStock,
+    onlyWithDiscount,
+    activeQuickFilter,
+    sortBy,
+    viewMode,
+  ]);
+
+  const visibleProducts = useMemo(
+    () => filteredProducts.slice(0, visibleCount),
+    [filteredProducts, visibleCount]
+  );
+
+  const hasMoreResults = filteredProducts.length > visibleCount;
 
   const toggleCategoryFilter = (category: Category) => {
     setSelectedCategories((prev) =>
@@ -872,7 +900,7 @@ function App() {
                   )}
 
                   <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-6">
-                    {filteredProducts.map(product => (
+                    {visibleProducts.map(product => (
                       <ProductCard 
                         key={product.id}
                         product={product}
@@ -885,6 +913,20 @@ function App() {
                       />
                     ))}
                   </div>
+
+                  {hasMoreResults && (
+                    <div className="flex justify-center mt-8">
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setVisibleCount((prev) => Math.min(prev + PAGE_SIZE, filteredProducts.length))
+                        }
+                        className="px-5 py-2.5 rounded-full border border-slate-200 text-slate-700 bg-white hover:bg-slate-50 shadow-sm"
+                      >
+                        Показать ещё ({visibleProducts.length} / {filteredProducts.length})
+                      </button>
+                    </div>
+                  )}
                   
                   {filteredProducts.length === 0 && (
                      <div className="text-center py-20">
@@ -1172,4 +1214,3 @@ function App() {
 }
 
 export default App;
-
