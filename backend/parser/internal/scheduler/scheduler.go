@@ -113,6 +113,7 @@ func DefaultTargets(logger *zap.Logger, scriptPath string) []CategoryTarget {
 		{Parser: cl, CategoryURL: "https://www.citilink.ru/catalog/planshetnyj-kompyuter-i-aksessuary/planshety/"},
 		{Parser: cl, CategoryURL: "https://www.citilink.ru/catalog/processory/"},
 		{Parser: cl, CategoryURL: "https://www.citilink.ru/catalog/videokarty/"},
+		{Parser: cl, CategoryURL: "https://www.citilink.ru/catalog/naushniki/"},
 	}
 }
 

@@ -8,9 +8,11 @@ Outputs JSON to stdout.
 import copy
 import io
 import json
+import os
 import re
 import sys
 import time
+from urllib.parse import quote
 
 # Force UTF-8 for stdout/stderr on Windows
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8")
@@ -47,18 +49,85 @@ def normalize_image_url(value):
     return ""
 
 
+def normalize_space_value(value):
+    if not isinstance(value, str):
+        return ""
+    return value.strip()
+
+
+def get_space_cookie_value(space_id):
+    value = normalize_space_value(space_id)
+    if not value:
+        return ""
+    return quote(value, safe="")
+
+
+def set_citilink_space_cookie(context, space_id):
+    value = get_space_cookie_value(space_id)
+    if not value:
+        return False
+    try:
+        context.add_cookies(
+            [
+                {
+                    "name": "_space",
+                    "value": value,
+                    "domain": ".citilink.ru",
+                    "path": "/",
+                }
+            ]
+        )
+        return True
+    except Exception as exc:
+        sys.stderr.write(f"failed to set citilink _space cookie: {exc}\n")
+        return False
+
+
 def uniq_urls(urls, limit=4):
     seen = set()
+    seen_keys = set()
     result = []
     for url in urls:
         normalized = normalize_image_url(url)
         if not normalized or normalized in seen:
             continue
+        key = normalized
+        if "/plain/" in normalized:
+            key = normalized.split("/plain/", 1)[1]
+        elif "/product-images/" in normalized:
+            key = normalized.split("/product-images/", 1)[1]
+        if "?" in key:
+            key = key.split("?", 1)[0]
+        if key in seen_keys:
+            continue
         seen.add(normalized)
+        seen_keys.add(key)
         result.append(normalized)
         if len(result) >= limit:
             break
     return result
+
+
+def extract_image_size(url):
+    if not isinstance(url, str):
+        return 0
+    width = 0
+    height = 0
+    match = re.search(r"width:(\d+)", url)
+    if match:
+        width = to_int(match.group(1))
+    match = re.search(r"height:(\d+)", url)
+    if match:
+        height = to_int(match.group(1))
+    if width == 0:
+        match = re.search(r"[?&]w(?:idth)?=(\d+)", url)
+        if match:
+            width = to_int(match.group(1))
+    if height == 0:
+        match = re.search(r"[?&]h(?:eight)?=(\d+)", url)
+        if match:
+            height = to_int(match.group(1))
+    return max(width, height)
 
 
 def normalize_for_match(text):
@@ -90,7 +159,7 @@ def detect_category(url, name, category_name=""):
     cat_text = normalize_for_match(category_name)
     text = " ".join([url_text, name_text, cat_text])
 
-    if has_any(text, ["televizory", "телевизор", "tv", "qled", "oled", "android tv", "smart tv"]):
+    if has_any(text, ["televizory", "телевизор", "tv", "qled", "android tv", "smart tv"]):
         return "tv"
     if has_any(text, ["noutbuki", "ноутбук", "laptop", "notebook", "macbook"]):
         return "laptop"
@@ -184,10 +253,11 @@ def sort_sources_by_quality(sources):
         if not url:
             continue
         size = str(source.get("size", "")).upper()
-        prepared.append((rank.get(size, 100), url))
+        pixels = extract_image_size(url)
+        prepared.append((pixels, rank.get(size, 100), url))
 
-    prepared.sort(key=lambda x: x[0])
-    return [url for _, url in prepared]
+    prepared.sort(key=lambda x: (x[1], -x[0]))
+    return [url for _, _, url in prepared]
 
 
 def extract_image_urls_graphql(item, limit=4):
@@ -340,6 +410,122 @@ def request_graphql_page(page, payload):
     return None
 
 
+def normalize_city_name(value):
+    text = normalize_for_match(value)
+    return text.replace("ё", "е").strip()
+
+
+def fetch_citilink_cities_for_select(page):
+    query = """
+    query GetCitiesForSelect {
+      citiesForSelect {
+        mainCities { id name }
+        groupedByLetter {
+          letter
+          cities { id name nameInDeclination spaceId isMainInRegion isUniqueName region }
+        }
+      }
+    }
+    """
+
+    response = request_graphql_page(page, {"query": query, "variables": {}})
+    if not response:
+        return []
+    data = response.get("data", {})
+    cities_for_select = data.get("citiesForSelect", {})
+    if not isinstance(cities_for_select, dict):
+        return []
+
+    cities = []
+    seen = set()
+    grouped = cities_for_select.get("groupedByLetter", [])
+    if isinstance(grouped, list):
+        for group in grouped:
+            if not isinstance(group, dict):
+                continue
+            group_cities = group.get("cities", [])
+            if not isinstance(group_cities, list):
+                continue
+            for city in group_cities:
+                if not isinstance(city, dict):
+                    continue
+                cid = str(city.get("id", "")).strip()
+                if not cid or cid in seen:
+                    continue
+                seen.add(cid)
+                cities.append(city)
+
+    main_cities = cities_for_select.get("mainCities", [])
+    if isinstance(main_cities, list):
+        for city in main_cities:
+            if not isinstance(city, dict):
+                continue
+            cid = str(city.get("id", "")).strip()
+            if not cid or cid in seen:
+                continue
+            seen.add(cid)
+            cities.append(
+                {
+                    "id": cid,
+                    "name": city.get("name", ""),
+                    "spaceId": cid,
+                    "isMainInRegion": True,
+                    "isUniqueName": True,
+                    "region": city.get("name", ""),
+                }
+            )
+
+    return cities
+
+
+def resolve_citilink_space_id(context):
+    space_id = normalize_space_value(os.getenv("CITILINK_SPACE", ""))
+    if space_id:
+        if space_id.lower() in ("auto", "ip", "none"):
+            return ""
+        return space_id
+
+    city_name = normalize_space_value(os.getenv("CITILINK_CITY", ""))
+    if city_name:
+        city_region = normalize_space_value(os.getenv("CITILINK_CITY_REGION", ""))
+        page = context.new_page()
+        try:
+            page.goto("https://www.citilink.ru/", wait_until="domcontentloaded", timeout=60000)
+            cities = fetch_citilink_cities_for_select(page)
+        finally:
+            page.close()
+
+        target = normalize_city_name(city_name)
+        region_target = normalize_city_name(city_region)
+        candidates = []
+        for city in cities:
+            name = normalize_city_name(city.get("name", ""))
+            if name == target:
+                candidates.append(city)
+
+        if region_target:
+            region_filtered = []
+            for city in candidates:
+                region_name = normalize_city_name(city.get("region", ""))
+                if region_target and region_target in region_name:
+                    region_filtered.append(city)
+            if region_filtered:
+                candidates = region_filtered
+
+        if candidates:
+            candidates.sort(
+                key=lambda c: (
+                    0 if c.get("isMainInRegion") else 1,
+                    0 if c.get("isUniqueName") else 1,
+                    0 if c.get("spaceId") == c.get("id") else 1,
+                )
+            )
+            picked = candidates[0]
+            return str(picked.get("id", "")).strip()
+
+    return "msk_cl"
+
+
 def parse_citilink_via_graphql(page, category_url):
     captured_payload = {"value": None}
 
@@ -376,69 +562,93 @@ def parse_citilink_via_graphql(page, category_url):
         return []
 
     pagination = filter_input.get("pagination", {})
-    # Citilink serves stable unique pages with 8 items per request.
-    # Larger "perPage" values can lead to duplicated tails on the last pages.
-    per_page = 8
+    per_page = 36
     if isinstance(pagination, dict):
-        original_per_page = max(1, to_int(pagination.get("perPage", 36), 36))
-        if original_per_page < per_page:
-            per_page = original_per_page
+        per_page = max(1, to_int(pagination.get("perPage", 36), 36))
+
+    partial = filter_input.get("partialPagination", {})
+    partial_limit = to_int(partial.get("limit", 0), 0) if isinstance(partial, dict) else 0
+    partial_offset = to_int(partial.get("offset", 0), 0) if isinstance(partial, dict) else 0
+    if partial_limit <= 0 or partial_offset < 0 or partial_offset >= per_page:
+        partial_limit = per_page
+        partial_offset = 0
+
+    chunks = []
+    if partial_offset > 0:
+        chunks.append((0, partial_offset))
+    if partial_limit > 0:
+        chunks.append((partial_offset, min(partial_limit, per_page - partial_offset)))
+    remaining = per_page - (partial_offset + partial_limit)
+    if remaining > 0:
+        chunks.append((partial_offset + partial_limit, remaining))
+    if not chunks:
+        chunks = [(0, per_page)]
 
     products = []
     seen = set()
     max_pages = 200
+    total_pages = 0
 
     for page_num in range(1, max_pages + 1):
-        page_payload = copy.deepcopy(payload)
-        pf = page_payload.setdefault("variables", {}).setdefault("subcategoryProductsFilterInput", {})
-        pg = pf.setdefault("pagination", {})
-        pg["page"] = page_num
-        pg["perPage"] = per_page
-        pf["partialPagination"] = {"limit": per_page, "offset": 0}
-
-        response = request_graphql_page(page, page_payload)
-        if not response:
-            break
-
-        record = response.get("data", {}).get("productsFilter", {}).get("record", {})
-        if not isinstance(record, dict):
-            break
-
-        items = record.get("products", [])
-        if not isinstance(items, list):
-            break
-
-        new_count = 0
-        for item in items:
-            parsed = map_graphql_product(item, category_url)
-            if not parsed:
-                continue
-            key = parsed.get("id") or parsed.get("url") or parsed.get("name")
-            if key in seen:
-                continue
-            seen.add(key)
-            products.append(parsed)
-            new_count += 1
-
-        page_info = record.get("pageInfo", {})
-        total_pages = 0
+        page_new = 0
+        page_items = 0
         has_next = False
-        if isinstance(page_info, dict):
-            total_pages = max(0, to_int(page_info.get("totalPages", 0), 0))
-            has_next = bool(page_info.get("hasNextPage", False))
 
-        sys.stderr.write(
-            f"graphql page {page_num}: items={len(items)} new={new_count} total={len(products)}\n"
-        )
+        for chunk_idx, (offset, limit) in enumerate(chunks, start=1):
+            page_payload = copy.deepcopy(payload)
+            pf = page_payload.setdefault("variables", {}).setdefault("subcategoryProductsFilterInput", {})
+            pg = pf.setdefault("pagination", {})
+            pg["page"] = page_num
+            pg["perPage"] = per_page
+            pf["partialPagination"] = {"limit": limit, "offset": offset}
+
+            response = request_graphql_page(page, page_payload)
+            if not response:
+                continue
+
+            record = response.get("data", {}).get("productsFilter", {}).get("record", {})
+            if not isinstance(record, dict):
+                continue
+
+            items = record.get("products", [])
+            if not isinstance(items, list):
+                continue
+
+            new_count = 0
+            for item in items:
+                parsed = map_graphql_product(item, category_url)
+                if not parsed:
+                    continue
+                key = parsed.get("id") or parsed.get("url") or parsed.get("name")
+                if key in seen:
+                    continue
+                seen.add(key)
+                products.append(parsed)
+                new_count += 1
+
+            page_items += len(items)
+            page_new += new_count
+
+            page_info = record.get("pageInfo", {})
+            if isinstance(page_info, dict):
+                if not total_pages:
+                    total_pages = max(0, to_int(page_info.get("totalPages", 0), 0))
+                has_next = has_next or bool(page_info.get("hasNextPage", False))
+
+            sys.stderr.write(
+                f"graphql page {page_num}/{total_pages or '?'} chunk {chunk_idx}/{len(chunks)}: items={len(items)} new={new_count} total={len(products)}\n"
+            )
+
+            time.sleep(0.35)
 
         if total_pages and page_num >= total_pages:
             break
         if not total_pages and not has_next:
             break
-        if not items:
+        if page_items == 0:
             break
 
-        time.sleep(0.55)
+        time.sleep(0.4)
 
     return products
 
@@ -551,6 +761,9 @@ def main():
             viewport={"width": 1920, "height": 1080},
         )
         context.add_init_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined});")
+        space_id = resolve_citilink_space_id(context)
+        if space_id:
+            set_citilink_space_cookie(context, space_id)
         page = context.new_page()
 
         try:

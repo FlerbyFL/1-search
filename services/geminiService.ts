@@ -285,11 +285,11 @@ const normalizeNameForGroup = (name: string): string =>
     .replace(/\s+/g, " ")
     .trim();
 
-const inferCategory = (name: string, query: string): Product["category"] => {
-  const text = `${name} ${query}`.toLowerCase();
+const inferCategory = (name: string): Product["category"] => {
+  const text = name.toLowerCase();
 
   if (/наушник|headphone|earbud|airpods|sony wh|buds/i.test(text)) return "headphones";
-  if (/телевизор|tv|qled|oled|android tv|smart tv/i.test(text)) return "tv";
+  if (/телевизор|tv|qled|android tv|smart tv/i.test(text)) return "tv";
   if (/смартфон|телефон|iphone|smartphone|mobile phone/i.test(text)) return "smartphone";
   if (/ноутбук|laptop|macbook|rog|legion|ideapad|vivobook|zenbook|aspire|pavilion|notebook/i.test(text)) return "laptop";
   if (/видеокарт|rtx|gtx|radeon|gpu|videocard/i.test(text)) return "gpu";
@@ -301,8 +301,13 @@ const inferCategory = (name: string, query: string): Product["category"] => {
   return "smartphone";
 };
 
-const normalizeBackendCategory = (rawCategory: string, name: string, query: string): Product["category"] => {
+const normalizeBackendCategory = (rawCategory: string, name: string): Product["category"] => {
   const value = rawCategory.trim().toLowerCase();
+  const nameValue = name.toLowerCase();
+  const looksLikePhone = /\u0441\u043c\u0430\u0440\u0442\u0444\u043e\u043d|\u0442\u0435\u043b\u0435\u0444\u043e\u043d|iphone|smartphone|mobile phone/i.test(nameValue);
+  if (value === "tv" && looksLikePhone) {
+    return "smartphone";
+  }
   switch (value) {
     case "smartphone":
       return "smartphone";
@@ -323,7 +328,7 @@ const normalizeBackendCategory = (rawCategory: string, name: string, query: stri
     case "tv":
       return "tv";
     default:
-      return inferCategory(name, query);
+      return inferCategory(rawCategory || name);
   }
 };
 
@@ -448,7 +453,7 @@ const hydrateBackendProducts = (rawResults: BackendProduct[], query: string): Pr
     let group = groups.get(groupKey);
 
     if (!group) {
-      const normalizedCategory = normalizeBackendCategory(normalized.category, normalized.name, query);
+      const normalizedCategory = normalizeBackendCategory(normalized.category, normalized.name);
       const fallbackImage = getFallbackImage(normalized.name, query);
       const images = normalized.images.length > 0 ? normalized.images : [normalized.image || fallbackImage];
       group = {

@@ -2,7 +2,10 @@ package db
 
 import (
 	"fmt"
+	"net/url"
+	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 
 	"backend/parser/internal/models"
@@ -264,9 +267,6 @@ func (d *DB) attachImages(products []models.Product) error {
 			continue
 		}
 		current := imageByProduct[productID]
-		if len(current) >= 4 {
-			continue
-		}
 		alreadyExists := false
 		for _, existing := range current {
 			if existing == url {
@@ -286,11 +286,12 @@ func (d *DB) attachImages(products []models.Product) error {
 	for i := range products {
 		images := imageByProduct[products[i].ID]
 		if products[i].ImageURL != "" {
-			images = prependUnique(products[i].ImageURL, images, 4)
+			images = prependUnique(products[i].ImageURL, images, 50)
 		}
-		products[i].ImageURLs = images
-		if products[i].ImageURL == "" && len(images) > 0 {
-			products[i].ImageURL = images[0]
+		bestImages := pickBestImages(images, 4)
+		products[i].ImageURLs = bestImages
+		if len(bestImages) > 0 {
+			products[i].ImageURL = bestImages[0]
 		}
 	}
 	return nil
@@ -363,7 +364,7 @@ func canonicalCategory(raw string) string {
 	}
 
 	switch {
-	case containsAny(value, []string{"televizory", "телевизор", "tv", "qled", "oled", "android tv", "smart tv"}):
+	case containsAny(value, []string{"televizory", "телевизор", "tv", "qled", "android tv", "smart tv"}):
 		return "tv"
 	case containsAny(value, []string{"noutbuki", "ноутбук", "laptop", "notebook", "macbook"}):
 		return "laptop"
@@ -392,7 +393,7 @@ func categoryNamePatterns(canonical string) []string {
 	case "laptop":
 		return []string{"%ноутбук%", "%laptop%", "%notebook%", "%macbook%"}
 	case "tv":
-		return []string{"%телевизор%", "%tv%", "%oled%", "%qled%"}
+		return []string{"%телевизор%", "%tv%", "%qled%"}
 	case "tablet":
 		return []string{"%планшет%", "%tablet%", "%ipad%"}
 	case "cpu":
@@ -428,6 +429,109 @@ func prependUnique(value string, list []string, limit int) []string {
 		if len(result) >= limit {
 			break
 		}
+	}
+	return result
+}
+
+var (
+	reImageWidth  = regexp.MustCompile(`width:(\d+)`)
+	reImageHeight = regexp.MustCompile(`height:(\d+)`)
+	reQueryWidth  = regexp.MustCompile(`[?&]w(?:idth)?=(\d+)`)
+	reQueryHeight = regexp.MustCompile(`[?&]h(?:eight)?=(\d+)`)
+)
+
+func imageSizeHint(raw string) int {
+	value := strings.TrimSpace(raw)
+	if value == "" {
+		return 0
+	}
+	if match := reImageWidth.FindStringSubmatch(value); len(match) > 1 {
+		if n, err := strconv.Atoi(match[1]); err == nil {
+			return n
+		}
+	}
+	if match := reImageHeight.FindStringSubmatch(value); len(match) > 1 {
+		if n, err := strconv.Atoi(match[1]); err == nil {
+			return n
+		}
+	}
+	if match := reQueryWidth.FindStringSubmatch(value); len(match) > 1 {
+		if n, err := strconv.Atoi(match[1]); err == nil {
+			return n
+		}
+	}
+	if match := reQueryHeight.FindStringSubmatch(value); len(match) > 1 {
+		if n, err := strconv.Atoi(match[1]); err == nil {
+			return n
+		}
+	}
+	return 0
+}
+
+func imageKey(raw string) string {
+	value := strings.TrimSpace(raw)
+	if value == "" {
+		return ""
+	}
+	path := value
+	if parsed, err := url.Parse(value); err == nil && parsed.Path != "" {
+		path = parsed.Path
+	}
+	if idx := strings.Index(path, "/plain/"); idx != -1 {
+		return strings.TrimPrefix(path[idx+len("/plain/"):], "/")
+	}
+	if idx := strings.Index(path, "/product-images/"); idx != -1 {
+		return strings.TrimPrefix(path[idx+1:], "/")
+	}
+	return path
+}
+
+func pickBestImages(urls []string, limit int) []string {
+	type candidate struct {
+		url   string
+		key   string
+		size  int
+		order int
+	}
+	candidates := make([]candidate, 0, len(urls))
+	for idx, raw := range urls {
+		clean := strings.TrimSpace(raw)
+		if clean == "" {
+			continue
+		}
+		key := imageKey(clean)
+		if key == "" {
+			key = clean
+		}
+		candidates = append(candidates, candidate{
+			url:   clean,
+			key:   key,
+			size:  imageSizeHint(clean),
+			order: idx,
+		})
+	}
+	if len(candidates) == 0 {
+		return []string{}
+	}
+
+	sort.SliceStable(candidates, func(i, j int) bool {
+		if candidates[i].size != candidates[j].size {
+			return candidates[i].size > candidates[j].size
+		}
+		return candidates[i].order < candidates[j].order
+	})
+
+	seen := map[string]struct{}{}
+	result := make([]string, 0, limit)
+	for _, candidate := range candidates {
+		if len(result) >= limit {
+			break
+		}
+		if _, exists := seen[candidate.key]; exists {
+			continue
+		}
+		seen[candidate.key] = struct{}{}
+		result = append(result, candidate.url)
 	}
 	return result
 }

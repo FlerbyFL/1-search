@@ -172,7 +172,7 @@ const inferProductCategory = (
   const text = name.toLowerCase();
 
   if (/headphone|earphone|earbud|airpods/i.test(text)) return "headphones";
-  if (/телевизор|tv|qled|oled|android tv|smart tv/i.test(text)) return "tv";
+  if (/телевизор|tv|qled|android tv|smart tv/i.test(text)) return "tv";
   if (/смартфон|телефон|iphone|smartphone|mobile phone/i.test(text)) return "smartphone";
   if (/laptop|macbook|rog|legion|ideapad|vivobook|zenbook|aspire|pavilion/i.test(text)) return "laptop";
   if (/rtx|gtx|radeon|gpu|videocard/i.test(text)) return "gpu";
