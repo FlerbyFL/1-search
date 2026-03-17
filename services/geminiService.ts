@@ -332,35 +332,124 @@ const normalizeBackendCategory = (rawCategory: string, name: string): Product["c
   }
 };
 
-const detectCategoryIntent = (query: string): CategoryIntent | null => {
-  const trimmed = query.trim().toLowerCase();
-  if (!trimmed) return null;
+const normalizeCategoryQuery = (query: string): string =>
+  query
+    .toLowerCase()
+    .replace(/[^a-z0-9\u0430-\u044f\u0451]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
 
-  if (/^(смартфон|смартфоны|телефон|телефоны|phone|smartphone|smartphones)$/.test(trimmed)) {
+const isCategoryQuery = (normalized: string, terms: string[]): boolean => {
+  if (!normalized) return false;
+  if (terms.includes(normalized)) return true;
+
+  if (normalized.startsWith("\u0432\u0441\u0435 ")) {
+    const rest = normalized.slice(4).trim();
+    if (terms.includes(rest)) return true;
+  }
+  if (normalized.endsWith(" \u0432\u0441\u0435")) {
+    const rest = normalized.slice(0, -4).trim();
+    if (terms.includes(rest)) return true;
+  }
+
+  return false;
+};
+
+const detectCategoryIntent = (query: string): CategoryIntent | null => {
+  const normalized = normalizeCategoryQuery(query);
+  if (!normalized) return null;
+
+  if (
+    isCategoryQuery(normalized, [
+      "\u0441\u043c\u0430\u0440\u0442\u0444\u043e\u043d",
+      "\u0441\u043c\u0430\u0440\u0442\u0444\u043e\u043d\u044b",
+      "\u0442\u0435\u043b\u0435\u0444\u043e\u043d",
+      "\u0442\u0435\u043b\u0435\u0444\u043e\u043d\u044b",
+      "\u043c\u043e\u0431\u0438\u043b\u044c\u043d\u044b\u0439 \u0442\u0435\u043b\u0435\u0444\u043e\u043d",
+      "\u043c\u043e\u0431\u0438\u043b\u044c\u043d\u044b\u0435 \u0442\u0435\u043b\u0435\u0444\u043e\u043d\u044b",
+      "\u043c\u043e\u0431\u0438\u043b\u044c\u043d\u0438\u043a",
+      "\u043c\u043e\u0431\u0438\u043b\u043a\u0430",
+      "phone",
+      "phones",
+      "mobile phone",
+      "mobile phones",
+      "smartphone",
+      "smartphones",
+    ])
+  ) {
     return { category: "smartphone", backendCategoryQuery: "smartphone" };
   }
-  if (/^(ноутбук|ноутбуки|laptop|laptops|notebook)$/.test(trimmed)) {
+  if (
+    isCategoryQuery(normalized, [
+      "\u043d\u043e\u0443\u0442\u0431\u0443\u043a",
+      "\u043d\u043e\u0443\u0442\u0431\u0443\u043a\u0438",
+      "\u043b\u044d\u043f\u0442\u043e\u043f",
+      "laptop",
+      "laptops",
+      "notebook",
+      "notebooks",
+    ])
+  ) {
     return { category: "laptop", backendCategoryQuery: "laptop" };
   }
-  if (/^(телевизор|телевизоры|tv|tvs|smart tv)$/.test(trimmed)) {
+  if (isCategoryQuery(normalized, ["\u0442\u0435\u043b\u0435\u0432\u0438\u0437\u043e\u0440", "\u0442\u0435\u043b\u0435\u0432\u0438\u0437\u043e\u0440\u044b", "tv", "tvs", "smart tv", "android tv"])) {
     return { category: "tv", backendCategoryQuery: "tv" };
   }
-  if (/^(планшет|планшеты|tablet|tablets|ipad)$/.test(trimmed)) {
+  if (isCategoryQuery(normalized, ["\u043f\u043b\u0430\u043d\u0448\u0435\u0442", "\u043f\u043b\u0430\u043d\u0448\u0435\u0442\u044b", "tablet", "tablets", "ipad", "ipads"])) {
     return { category: "tablet", backendCategoryQuery: "tablet" };
   }
-  if (/^(наушник|наушники|headphone|headphones|earbuds|airpods)$/.test(trimmed)) {
+  if (
+    isCategoryQuery(normalized, [
+      "\u043d\u0430\u0443\u0448\u043d\u0438\u043a",
+      "\u043d\u0430\u0443\u0448\u043d\u0438\u043a\u0438",
+      "headphone",
+      "headphones",
+      "earbud",
+      "earbuds",
+      "airpods",
+    ])
+  ) {
     return { category: "headphones", backendCategoryQuery: "headphones" };
   }
-  if (/^(видеокарта|видеокарты|gpu|graphics card|videocard)$/.test(trimmed)) {
+  if (
+    isCategoryQuery(normalized, [
+      "\u0432\u0438\u0434\u0435\u043e\u043a\u0430\u0440\u0442\u0430",
+      "\u0432\u0438\u0434\u0435\u043e\u043a\u0430\u0440\u0442\u044b",
+      "gpu",
+      "graphics card",
+      "graphics cards",
+      "videocard",
+      "video card",
+    ])
+  ) {
     return { category: "gpu", backendCategoryQuery: "gpu" };
   }
-  if (/^(процессор|процессоры|cpu|processor|processors)$/.test(trimmed)) {
+  if (isCategoryQuery(normalized, ["\u043f\u0440\u043e\u0446\u0435\u0441\u0441\u043e\u0440", "\u043f\u0440\u043e\u0446\u0435\u0441\u0441\u043e\u0440\u044b", "cpu", "processor", "processors"])) {
     return { category: "cpu", backendCategoryQuery: "cpu" };
   }
-  if (/^(часы|смарт-часы|smartwatch|smartwatches|watch)$/.test(trimmed)) {
+  if (
+    isCategoryQuery(normalized, [
+      "\u0447\u0430\u0441\u044b",
+      "\u0441\u043c\u0430\u0440\u0442 \u0447\u0430\u0441\u044b",
+      "\u0441\u043c\u0430\u0440\u0442-\u0447\u0430\u0441\u044b",
+      "smartwatch",
+      "smartwatches",
+      "watch",
+      "watches",
+    ])
+  ) {
     return { category: "smartwatch", backendCategoryQuery: "smartwatch" };
   }
-  if (/^(камера|камеры|фотоаппарат|camera|cameras)$/.test(trimmed)) {
+  if (
+    isCategoryQuery(normalized, [
+      "\u043a\u0430\u043c\u0435\u0440\u0430",
+      "\u043a\u0430\u043c\u0435\u0440\u044b",
+      "\u0444\u043e\u0442\u043e\u0430\u043f\u043f\u0430\u0440\u0430\u0442",
+      "\u0444\u043e\u0442\u043e\u0430\u043f\u043f\u0430\u0440\u0430\u0442\u044b",
+      "camera",
+      "cameras",
+    ])
+  ) {
     return { category: "camera", backendCategoryQuery: "camera" };
   }
 
@@ -602,16 +691,41 @@ const fetchBackendResults = async (queries: string[]): Promise<BackendProduct[]>
 };
 
 const fetchCategoryProducts = async (categoryQuery: string): Promise<BackendProduct[]> => {
+  const all: BackendProduct[] = [];
+  const limit = 100;
+  const maxPages = 200;
+  let page = 1;
+  let total = Number.POSITIVE_INFINITY;
+
   try {
-    const response = await fetch(
-      `${API_BASE}/api/v1/products?category=${encodeURIComponent(categoryQuery)}&page=1&limit=100`
-    );
-    if (!response.ok) return [];
-    const payload: BackendProductsResponse = await response.json();
-    return uniqueBackendResults(extractBackendResults(payload));
+    while (page <= maxPages && all.length < total) {
+      const response = await fetch(
+        `${API_BASE}/api/v1/products?category=${encodeURIComponent(categoryQuery)}&page=${page}&limit=${limit}`
+      );
+      if (!response.ok) break;
+
+      const payload: BackendProductsResponse = await response.json();
+      const batch = extractBackendResults(payload);
+      if (batch.length === 0) break;
+
+      all.push(...batch);
+
+      if (typeof payload.total === "number" && Number.isFinite(payload.total)) {
+        total = payload.total;
+      }
+      const payloadLimit = typeof payload.limit === "number" && payload.limit > 0 ? payload.limit : limit;
+      if (Number.isFinite(total)) {
+        const totalPages = Math.ceil(total / payloadLimit);
+        if (page >= totalPages) break;
+      }
+
+      page += 1;
+    }
   } catch {
-    return [];
+    return uniqueBackendResults(all);
   }
+
+  return uniqueBackendResults(all);
 };
 
 export const searchProductsWithAI = async (query: string): Promise<Product[]> => {
@@ -629,6 +743,11 @@ export const searchProductsWithAI = async (query: string): Promise<Product[]> =>
     if (backendResults.length > 0) {
       console.log("Used Go Backend for results");
       return hydrateBackendProducts(backendResults, query);
+    }
+
+    const fallbackCategoryResults = await fetchCategoryProducts(query);
+    if (fallbackCategoryResults.length > 0) {
+      return hydrateBackendProducts(fallbackCategoryResults, query);
     }
   } catch (error) {
     console.warn("Go Backend unavailable", error);
