@@ -8,6 +8,7 @@ import PriceHistoryChart from './components/PriceHistoryChart';
 import UserDrawer from './components/UserDrawer';
 import AuthScreen from './components/AuthScreen';
 import { searchProductsWithAI } from './services/geminiService';
+import { fetchUserById, updateUserLists } from './services/userService';
 import { Search, Bot, BarChart2, ArrowRight, ShieldCheck, Sparkles, ShoppingBag, Heart, Star, CheckCircle, TrendingDown, Truck, ArrowLeft, Filter, ArrowUpRight, Store, Loader2, LogOut, ChevronDown } from 'lucide-react';
 
 const CATEGORY_LABELS: Record<Category, string> = {
@@ -27,6 +28,8 @@ const IMAGE_FALLBACK = `data:image/svg+xml;utf8,${encodeURIComponent(
 )}`;
 
 const PAGE_SIZE = 48;
+const PRODUCT_CACHE_KEY = 'nex_product_cache';
+const MAX_PRODUCT_CACHE = 300;
 
 const normalizeValue = (value: string) => value.trim().toLowerCase();
 
@@ -182,9 +185,11 @@ function App() {
   // Auth State
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [user, setUser] = useState<User | null>(null);
+  const [userSyncReady, setUserSyncReady] = useState(false);
 
   // Data State
   const [products, setProducts] = useState<Product[]>(MOCK_PRODUCTS);
+  const [productCatalog, setProductCatalog] = useState<Product[]>(MOCK_PRODUCTS);
   const [filteredProducts, setFilteredProducts] = useState<Product[]>(MOCK_PRODUCTS);
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
   const [isSearching, setIsSearching] = useState(false);
@@ -203,10 +208,10 @@ function App() {
   const [isVariantsLoading, setIsVariantsLoading] = useState(false);
   
   // App Mode State
-  const [viewMode, setViewMode] = useState<'home' | 'results' | 'product'>('home');
-  const [lastListViewMode, setLastListViewMode] = useState<'home' | 'results'>('home');
+  const [viewMode, setViewMode] = useState<'home' | 'results' | 'product' | 'account'>('home');
+  const [lastListViewMode, setLastListViewMode] = useState<'home' | 'results' | 'account'>('home');
+  const [lastNonAccountViewMode, setLastNonAccountViewMode] = useState<'home' | 'results' | 'product'>('home');
   const [searchPlaceholder, setSearchPlaceholder] = useState('iPhone 15...');
-  const [isUserDrawerOpen, setIsUserDrawerOpen] = useState(false);
 
   // Filters State
   const [activeQuickFilter, setActiveQuickFilter] = useState<string | null>(null);
@@ -226,15 +231,34 @@ function App() {
   const [brandSearchTerm, setBrandSearchTerm] = useState('');
   
   const searchInputRef = useRef<HTMLInputElement>(null);
+  const userSyncTimerRef = useRef<number | null>(null);
+  const lastUserSyncSnapshotRef = useRef<string | null>(null);
 
-  const getProductKeyFromHash = () => {
+  const getRouteFromHash = () => {
     const hash = window.location.hash || '';
-    const match = hash.match(/^#\/?product\/(.+)$/);
-    return match ? decodeURIComponent(match[1]) : null;
+    const accountMatch = hash.match(/^#\/?account\/?$/);
+    if (accountMatch) {
+      return { type: 'account' as const };
+    }
+    const productMatch = hash.match(/^#\/?product\/(.+)$/);
+    if (productMatch) {
+      return { type: 'product' as const, key: decodeURIComponent(productMatch[1]) };
+    }
+    return { type: 'none' as const };
   };
 
   const setProductHash = (productKey: string | null, replace = false) => {
     const hash = productKey ? `#/product/${encodeURIComponent(productKey)}` : '';
+    const url = `${window.location.pathname}${window.location.search}${hash}`;
+    if (replace) {
+      window.history.replaceState({}, '', url);
+    } else {
+      window.history.pushState({}, '', url);
+    }
+  };
+
+  const setAccountHash = (open: boolean, replace = false) => {
+    const hash = open ? '#/account' : '';
     const url = `${window.location.pathname}${window.location.search}${hash}`;
     if (replace) {
       window.history.replaceState({}, '', url);
@@ -383,14 +407,84 @@ function App() {
     setSortBy(event.target.value as 'none' | 'price_asc' | 'price_desc' | 'rating_desc' | 'rating_asc' | 'name_asc');
   };
 
+  const mergeProductCatalog = (incoming: Product[]) => {
+    if (!incoming || incoming.length === 0) return;
+    setProductCatalog((prev) => {
+      const map = new Map(prev.map((item) => [item.id, item]));
+      incoming.forEach((item) => {
+        if (!item?.id) return;
+        if (map.has(item.id)) {
+          map.delete(item.id);
+        }
+        map.set(item.id, item);
+      });
+      const merged = Array.from(map.values());
+      if (merged.length > MAX_PRODUCT_CACHE) {
+        return merged.slice(merged.length - MAX_PRODUCT_CACHE);
+      }
+      return merged;
+    });
+  };
+
+  const openAccountPage = (options?: { pushUrl?: boolean }) => {
+    if (!user) return;
+    if (viewMode !== 'account') {
+      setLastNonAccountViewMode(viewMode);
+    }
+    window.scrollTo({ top: 0, left: 0, behavior: 'auto' });
+    setViewMode('account');
+    if (options?.pushUrl !== false) {
+      setAccountHash(true);
+    }
+  };
+
+  const closeAccountPage = (options?: { skipUrl?: boolean }) => {
+    setViewMode(lastNonAccountViewMode);
+    if (options?.skipUrl) return;
+    if (lastNonAccountViewMode === 'product' && selectedProduct) {
+      setProductHash(getProductUrlKey(selectedProduct));
+    } else {
+      setAccountHash(false);
+    }
+  };
+
+  const sanitizeUser = (raw: User): User => ({
+    ...raw,
+    cart: Array.isArray(raw.cart) ? raw.cart : [],
+    wishlist: Array.isArray(raw.wishlist) ? raw.wishlist : [],
+    history: Array.isArray(raw.history) ? raw.history.slice(0, 30) : [],
+  });
+
+  useEffect(() => {
+    const storedCatalog = localStorage.getItem(PRODUCT_CACHE_KEY);
+    if (!storedCatalog) return;
+    try {
+      const parsed = JSON.parse(storedCatalog);
+      if (Array.isArray(parsed)) {
+        mergeProductCatalog(parsed as Product[]);
+      }
+    } catch (e) {
+      console.error('Failed to parse product cache', e);
+    }
+  }, []);
+
+  useEffect(() => {
+    localStorage.setItem(PRODUCT_CACHE_KEY, JSON.stringify(productCatalog));
+  }, [productCatalog]);
+
+  useEffect(() => {
+    mergeProductCatalog(products);
+  }, [products]);
+
   // Check for existing session
   useEffect(() => {
     const storedUser = localStorage.getItem('nex_current_user');
     if (storedUser) {
       try {
         const parsedUser = JSON.parse(storedUser);
-        setUser(parsedUser);
+        setUser(sanitizeUser(parsedUser));
         setIsAuthenticated(true);
+        setUserSyncReady(false);
       } catch (e) {
         console.error("Failed to parse stored user", e);
       }
@@ -401,6 +495,67 @@ function App() {
     if (!user) return;
     localStorage.setItem('nex_current_user', JSON.stringify(user));
   }, [user]);
+
+  useEffect(() => {
+    if (!user || userSyncReady) return;
+    let isActive = true;
+    const loadRemote = async () => {
+      const remote = await fetchUserById(user.id);
+      if (!isActive) return;
+      if (remote) {
+        setUser((prev) => {
+          if (!prev) return sanitizeUser(remote);
+          return sanitizeUser({ ...prev, ...remote });
+        });
+        lastUserSyncSnapshotRef.current = JSON.stringify({
+          cart: remote.cart,
+          wishlist: remote.wishlist,
+          history: remote.history,
+        });
+      } else {
+        lastUserSyncSnapshotRef.current = JSON.stringify({
+          cart: user.cart,
+          wishlist: user.wishlist,
+          history: user.history,
+        });
+      }
+      setUserSyncReady(true);
+    };
+    loadRemote();
+    return () => {
+      isActive = false;
+    };
+  }, [user, userSyncReady]);
+
+  useEffect(() => {
+    if (!userSyncReady || !user) return;
+    const snapshot = JSON.stringify({
+      cart: user.cart,
+      wishlist: user.wishlist,
+      history: user.history,
+    });
+    if (snapshot === lastUserSyncSnapshotRef.current) return;
+
+    if (userSyncTimerRef.current) {
+      window.clearTimeout(userSyncTimerRef.current);
+    }
+
+    userSyncTimerRef.current = window.setTimeout(() => {
+      updateUserLists(user.id, {
+        cart: user.cart,
+        wishlist: user.wishlist,
+        history: user.history,
+      }).then(() => {
+        lastUserSyncSnapshotRef.current = snapshot;
+      });
+    }, 600);
+
+    return () => {
+      if (userSyncTimerRef.current) {
+        window.clearTimeout(userSyncTimerRef.current);
+      }
+    };
+  }, [user, userSyncReady]);
 
   // Placeholder Animation
   useEffect(() => {
@@ -551,16 +706,27 @@ function App() {
 
   useEffect(() => {
     const syncFromUrl = () => {
-      const productKey = getProductKeyFromHash();
-      if (!productKey) {
-        if (viewMode === 'product') {
-          closeProductPage({ skipUrl: true });
+      const route = getRouteFromHash();
+      if (route.type === 'account') {
+        if (viewMode !== 'account') {
+          openAccountPage({ pushUrl: false });
         }
         return;
       }
 
-      if (selectedProduct && normalizeProductKey(selectedProduct.name) === normalizeProductKey(productKey)) return;
-      void openProductByKey(productKey, { pushUrl: false });
+      if (route.type === 'product') {
+        const productKey = route.key;
+        if (selectedProduct && normalizeProductKey(selectedProduct.name) === normalizeProductKey(productKey)) return;
+        void openProductByKey(productKey, { pushUrl: false });
+        return;
+      }
+
+      if (viewMode === 'product') {
+        closeProductPage({ skipUrl: true });
+      }
+      if (viewMode === 'account') {
+        closeAccountPage({ skipUrl: true });
+      }
     };
 
     syncFromUrl();
@@ -570,7 +736,7 @@ function App() {
       window.removeEventListener('hashchange', syncFromUrl);
       window.removeEventListener('popstate', syncFromUrl);
     };
-  }, [viewMode, selectedProduct, products, lastListViewMode]);
+  }, [viewMode, selectedProduct, products, productCatalog, lastListViewMode, lastNonAccountViewMode, user]);
 
   useEffect(() => {
     setVisibleCount(PAGE_SIZE);
@@ -630,7 +796,8 @@ function App() {
 
   const openProduct = (product: Product, options?: { pushUrl?: boolean }) => {
     window.scrollTo({ top: 0, left: 0, behavior: 'auto' });
-    setLastListViewMode(viewMode === 'product' ? lastListViewMode : viewMode);
+    const baseViewMode = viewMode === 'product' ? lastListViewMode : viewMode;
+    setLastListViewMode(baseViewMode === 'account' ? lastNonAccountViewMode : baseViewMode);
     setViewMode('product');
     setSelectedProduct(product);
     setSelectedProductImage(product.images?.[0] || product.image || IMAGE_FALLBACK);
@@ -641,12 +808,13 @@ function App() {
   };
 
   const handleProductSelect = (product: Product) => {
+    mergeProductCatalog([product]);
     if (user) {
         setUser(prev => {
            if (!prev) return null;
            return {
              ...prev,
-             history: [product.id, ...prev.history.filter(id => id !== product.id)].slice(0, 10)
+             history: [product.id, ...prev.history.filter(id => id !== product.id)].slice(0, 30)
            };
         });
     }
@@ -668,8 +836,11 @@ function App() {
     const normalizedKey = normalizeProductKey(productKey);
     const existing =
       products.find((product) => product.id === productKey) ||
-      products.find((product) => normalizeProductKey(product.name) === normalizedKey);
+      products.find((product) => normalizeProductKey(product.name) === normalizedKey) ||
+      productCatalog.find((product) => product.id === productKey) ||
+      productCatalog.find((product) => normalizeProductKey(product.name) === normalizedKey);
     if (existing) {
+      mergeProductCatalog([existing]);
       openProduct(existing, options);
       return;
     }
@@ -682,6 +853,7 @@ function App() {
 
     if (results.length > 0) {
       setProducts(results);
+      mergeProductCatalog(results);
       const found =
         results.find((product) => product.id === productKey) ||
         results.find((product) => normalizeProductKey(product.name) === normalizedKey) ||
@@ -863,9 +1035,10 @@ function App() {
   const handleToggleLike = (e: React.MouseEvent, product: Product) => {
     e.stopPropagation();
     if (!user) {
-        setIsUserDrawerOpen(true); 
+        openAccountPage();
         return;
     }
+    mergeProductCatalog([product]);
     setUser(prev => {
       if (!prev) return null;
       const isLiked = prev.wishlist.includes(product.id);
@@ -899,8 +1072,11 @@ function App() {
     
     if (results.length > 0) {
         setProducts(results);
+        mergeProductCatalog(results);
     } else {
-        setProducts(MOCK_PRODUCTS.filter(p => p.name.toLowerCase().includes(searchTerm.toLowerCase())));
+        const fallback = MOCK_PRODUCTS.filter(p => p.name.toLowerCase().includes(searchTerm.toLowerCase()));
+        setProducts(fallback);
+        mergeProductCatalog(fallback);
     }
     
     setIsSearching(false);
@@ -927,7 +1103,25 @@ function App() {
   };
 
   if (!isAuthenticated) {
-    return <AuthScreen onLogin={(u) => { setUser(u); setIsAuthenticated(true); }} />;
+    return (
+      <AuthScreen
+        onLogin={(u) => {
+          const nextUser = sanitizeUser(u);
+          setUser(nextUser);
+          setIsAuthenticated(true);
+          setUserSyncReady(true);
+          setViewMode('home');
+          setLastNonAccountViewMode('home');
+          setLastListViewMode('home');
+          setSelectedProduct(null);
+          setSearchTerm('');
+          setProducts(MOCK_PRODUCTS);
+          resetFilters();
+          setProductHash(null, true);
+          setAccountHash(false, true);
+        }}
+      />
+    );
   }
 
   return (
@@ -973,13 +1167,8 @@ function App() {
              <button onClick={() => setIsAIOpen(true)} className="p-2 text-slate-500 hover:bg-slate-100 rounded-full transition-all">
                 <Sparkles size={20} />
              </button>
-             <button onClick={() => setIsUserDrawerOpen(true)} className="relative p-1 rounded-full hover:ring-2 hover:ring-slate-200 transition-all group">
+             <button onClick={openAccountPage} className="relative p-1 rounded-full hover:ring-2 hover:ring-slate-200 transition-all group">
                <img src={user?.avatar} alt={user?.name} className="w-8 h-8 rounded-full border border-white shadow-sm" />
-               {(user?.cart.length || 0) > 0 && (
-                  <span className="absolute -top-1 -right-1 w-4 h-4 bg-slate-900 text-white text-[10px] font-bold flex items-center justify-center rounded-full border border-white">
-                    {user?.cart.length}
-                  </span>
-               )}
             </button>
           </div>
         </div>
@@ -1368,17 +1557,20 @@ function App() {
         />
       )}
 
-      {/* User Drawer */}
-      {user && (
-        <UserDrawer 
-          user={user}
-          isOpen={isUserDrawerOpen}
-          onClose={() => setIsUserDrawerOpen(false)}
-          products={products}
-          onRemoveFromCart={(id) => setUser(prev => prev ? ({ ...prev, cart: prev.cart.filter(c => c !== id) }) : null)}
-          onRemoveFromWishlist={(id) => setUser(prev => prev ? ({ ...prev, wishlist: prev.wishlist.filter(w => w !== id) }) : null)}
-          onSelectProduct={handleProductSelect}
-        />
+      {/* Account Page */}
+      {viewMode === 'account' && user && (
+        <main className="pt-24 pb-20 max-w-6xl mx-auto px-4 md:px-8">
+          <UserDrawer 
+            user={user}
+            isOpen={true}
+            variant="page"
+            onClose={closeAccountPage}
+            products={productCatalog}
+            onRemoveFromWishlist={(id) => setUser(prev => prev ? ({ ...prev, wishlist: prev.wishlist.filter(w => w !== id) }) : null)}
+            onSelectProduct={handleProductSelect}
+            onUpdateUser={(next) => setUser(sanitizeUser(next))}
+          />
+        </main>
       )}
 
       {/* AI Sidebar */}

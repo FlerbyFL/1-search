@@ -46,6 +46,11 @@ func Run() {
 		logger.Fatal("Failed to apply migrations", zap.Error(err))
 	}
 
+	avatarsDir := getEnv("AVATAR_DIR", "storage/avatars")
+	if err := os.MkdirAll(avatarsDir, 0755); err != nil {
+		logger.Fatal("Failed to create avatars dir", zap.Error(err))
+	}
+
 	if !*debug {
 		gin.SetMode(gin.ReleaseMode)
 	}
@@ -55,8 +60,9 @@ func Run() {
 	r.Use(corsMiddleware())
 	r.Use(ginLogger(logger))
 
-	handler := api.NewHandler(database, logger)
+	handler := api.NewHandler(database, logger, avatarsDir)
 	handler.SetupRoutes(r)
+	r.Static("/api/v1/avatars", avatarsDir)
 
 	addr := ":" + *port
 	logger.Info("API server starting", zap.String("addr", addr))
@@ -68,7 +74,7 @@ func Run() {
 func corsMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		c.Header("Access-Control-Allow-Origin", "*")
-		c.Header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+		c.Header("Access-Control-Allow-Methods", "GET, POST, PATCH, OPTIONS")
 		c.Header("Access-Control-Allow-Headers", "Content-Type, Authorization")
 		if c.Request.Method == "OPTIONS" {
 			c.AbortWithStatus(204)

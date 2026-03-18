@@ -1,9 +1,15 @@
 package api
 
 import (
+	"fmt"
+	"image"
+	"image/jpeg"
+	"image/png"
 	"io"
 	"net/http"
 	"net/url"
+	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -18,12 +24,15 @@ import (
 )
 
 type Handler struct {
-	db     *db.DB
-	logger *zap.Logger
+	db         *db.DB
+	logger     *zap.Logger
+	avatarsDir string
 }
 
-func NewHandler(database *db.DB, logger *zap.Logger) *Handler {
-	return &Handler{db: database, logger: logger}
+const maxAvatarSize = 2 * 1024 * 1024
+
+func NewHandler(database *db.DB, logger *zap.Logger, avatarsDir string) *Handler {
+	return &Handler{db: database, logger: logger, avatarsDir: avatarsDir}
 }
 
 func (h *Handler) SetupRoutes(r *gin.Engine) {
@@ -39,7 +48,16 @@ func (h *Handler) SetupRoutes(r *gin.Engine) {
 			auth.POST("/register", h.Register)
 			auth.POST("/login", h.Login)
 		}
+
+		users := api.Group("/users")
+		{
+			users.GET("/:id", h.GetUser)
+			users.PATCH("/:id", h.UpdateUser)
+			users.PATCH("/:id/profile", h.UpdateUserProfile)
+			users.POST("/:id/avatar", h.UploadAvatar)
+		}
 	}
+
 	// Health check
 	r.GET("/health", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"status": "ok"})
@@ -128,6 +146,16 @@ type authUserResponse struct {
 	Status   string   `json:"status"`
 }
 
+type userUpdateRequest struct {
+	Cart     []string `json:"cart"`
+	Wishlist []string `json:"wishlist"`
+	History  []string `json:"history"`
+}
+
+type userProfileRequest struct {
+	Name string `json:"name"`
+}
+
 func (h *Handler) Register(c *gin.Context) {
 	var req authRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -200,6 +228,192 @@ func (h *Handler) Login(c *gin.Context) {
 
 	if err := bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(password)); err != nil {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid email or password"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"user": mapUserResponse(user)})
+}
+
+// GET /api/v1/users/:id
+func (h *Handler) GetUser(c *gin.Context) {
+	userID, err := parseUserIDParam(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid user id"})
+		return
+	}
+
+	user, err := h.db.GetUserByID(userID)
+	if err != nil {
+		if err == db.ErrUserNotFound {
+			c.JSON(http.StatusNotFound, gin.H{"error": "user not found"})
+			return
+		}
+		h.logger.Error("GetUser failed", zap.Error(err))
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal error"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"user": mapUserResponse(user)})
+}
+
+// PATCH /api/v1/users/:id
+func (h *Handler) UpdateUser(c *gin.Context) {
+	userID, err := parseUserIDParam(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid user id"})
+		return
+	}
+
+	var req userUpdateRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body"})
+		return
+	}
+
+	cart := normalizeStringList(req.Cart, 0)
+	wishlist := normalizeStringList(req.Wishlist, 0)
+	history := normalizeStringList(req.History, 30)
+
+	user, err := h.db.UpdateUserLists(userID, cart, wishlist, history)
+	if err != nil {
+		if err == db.ErrUserNotFound {
+			c.JSON(http.StatusNotFound, gin.H{"error": "user not found"})
+			return
+		}
+		h.logger.Error("UpdateUser failed", zap.Error(err))
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal error"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"user": mapUserResponse(user)})
+}
+
+// PATCH /api/v1/users/:id/profile
+func (h *Handler) UpdateUserProfile(c *gin.Context) {
+	userID, err := parseUserIDParam(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid user id"})
+		return
+	}
+
+	var req userProfileRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body"})
+		return
+	}
+
+	name := strings.TrimSpace(req.Name)
+	if len(name) < 2 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "name must be at least 2 characters"})
+		return
+	}
+
+	user, err := h.db.UpdateUserName(userID, name)
+	if err != nil {
+		if err == db.ErrUserNotFound {
+			c.JSON(http.StatusNotFound, gin.H{"error": "user not found"})
+			return
+		}
+		h.logger.Error("UpdateUserProfile failed", zap.Error(err))
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal error"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"user": mapUserResponse(user)})
+}
+
+// POST /api/v1/users/:id/avatar
+func (h *Handler) UploadAvatar(c *gin.Context) {
+	userID, err := parseUserIDParam(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid user id"})
+		return
+	}
+
+	fileHeader, err := c.FormFile("avatar")
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "avatar file is required"})
+		return
+	}
+	if fileHeader.Size > maxAvatarSize {
+		c.JSON(http.StatusRequestEntityTooLarge, gin.H{"error": "avatar file is too large"})
+		return
+	}
+
+	src, err := fileHeader.Open()
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "failed to read avatar"})
+		return
+	}
+	defer src.Close()
+
+	img, format, err := image.Decode(io.LimitReader(src, maxAvatarSize))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid image"})
+		return
+	}
+	if format != "jpeg" && format != "png" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "only jpeg or png images are allowed"})
+		return
+	}
+
+	ext := "jpg"
+	if format == "png" {
+		ext = "png"
+	}
+
+	if err := os.MkdirAll(h.avatarsDir, 0755); err != nil {
+		h.logger.Error("Avatar dir creation failed", zap.Error(err))
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal error"})
+		return
+	}
+
+	tmpFile, err := os.CreateTemp(h.avatarsDir, "upload-*."+ext)
+	if err != nil {
+		h.logger.Error("Avatar temp file failed", zap.Error(err))
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal error"})
+		return
+	}
+
+	if format == "jpeg" {
+		if err := jpeg.Encode(tmpFile, img, &jpeg.Options{Quality: 85}); err != nil {
+			tmpFile.Close()
+			os.Remove(tmpFile.Name())
+			c.JSON(http.StatusBadRequest, gin.H{"error": "failed to process image"})
+			return
+		}
+	} else if err := png.Encode(tmpFile, img); err != nil {
+		tmpFile.Close()
+		os.Remove(tmpFile.Name())
+		c.JSON(http.StatusBadRequest, gin.H{"error": "failed to process image"})
+		return
+	}
+	if err := tmpFile.Close(); err != nil {
+		os.Remove(tmpFile.Name())
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to save image"})
+		return
+	}
+
+	finalName := fmt.Sprintf("user_%d.%s", userID, ext)
+	finalPath := filepath.Join(h.avatarsDir, finalName)
+	if err := os.Rename(tmpFile.Name(), finalPath); err != nil {
+		_ = os.Remove(finalPath)
+		if err := os.Rename(tmpFile.Name(), finalPath); err != nil {
+			h.logger.Error("Avatar rename failed", zap.Error(err))
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to save avatar"})
+			return
+		}
+	}
+
+	avatarURL := fmt.Sprintf("%s://%s/api/v1/avatars/%s", requestScheme(c), c.Request.Host, finalName)
+	user, err := h.db.UpdateUserAvatar(userID, avatarURL)
+	if err != nil {
+		if err == db.ErrUserNotFound {
+			c.JSON(http.StatusNotFound, gin.H{"error": "user not found"})
+			return
+		}
+		h.logger.Error("UpdateUserAvatar failed", zap.Error(err))
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal error"})
 		return
 	}
 
@@ -323,12 +537,57 @@ func normalizeImageURL(raw string) (string, error) {
 	return u.String(), nil
 }
 
+func requestScheme(c *gin.Context) string {
+	if proto := c.Request.Header.Get("X-Forwarded-Proto"); proto != "" {
+		parts := strings.Split(proto, ",")
+		if len(parts) > 0 {
+			candidate := strings.TrimSpace(parts[0])
+			if candidate != "" {
+				return candidate
+			}
+		}
+	}
+	if c.Request.TLS != nil {
+		return "https"
+	}
+	return "http"
+}
+
 func hashPassword(password string) (string, error) {
 	hashed, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 	if err != nil {
 		return "", err
 	}
 	return string(hashed), nil
+}
+
+func parseUserIDParam(raw string) (int64, error) {
+	trimmed := strings.TrimSpace(raw)
+	trimmed = strings.TrimPrefix(trimmed, "u-")
+	return strconv.ParseInt(trimmed, 10, 64)
+}
+
+func normalizeStringList(values []string, limit int) []string {
+	if len(values) == 0 {
+		return []string{}
+	}
+	seen := make(map[string]struct{}, len(values))
+	result := make([]string, 0, len(values))
+	for _, value := range values {
+		trimmed := strings.TrimSpace(value)
+		if trimmed == "" {
+			continue
+		}
+		if _, exists := seen[trimmed]; exists {
+			continue
+		}
+		seen[trimmed] = struct{}{}
+		result = append(result, trimmed)
+		if limit > 0 && len(result) >= limit {
+			break
+		}
+	}
+	return result
 }
 
 func mapUserResponse(user models.User) authUserResponse {
