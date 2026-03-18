@@ -8,7 +8,7 @@ import PriceHistoryChart from './components/PriceHistoryChart';
 import UserDrawer from './components/UserDrawer';
 import AuthScreen from './components/AuthScreen';
 import { searchProductsWithAI } from './services/geminiService';
-import { Search, Bot, BarChart2, X, ArrowRight, ShieldCheck, Sparkles, ShoppingBag, Heart, Star, CheckCircle, TrendingDown, Truck, ArrowLeft, Filter, ArrowUpRight, Store, Loader2, LogOut } from 'lucide-react';
+import { Search, Bot, BarChart2, ArrowRight, ShieldCheck, Sparkles, ShoppingBag, Heart, Star, CheckCircle, TrendingDown, Truck, ArrowLeft, Filter, ArrowUpRight, Store, Loader2, LogOut, ChevronDown } from 'lucide-react';
 
 const CATEGORY_LABELS: Record<Category, string> = {
   smartphone: 'Смартфоны',
@@ -377,6 +377,10 @@ function App() {
     setter: React.Dispatch<React.SetStateAction<string>>
   ) => {
     setter(event.target.value.replace(/[^\d]/g, ''));
+  };
+
+  const handleSortChange = (event: React.ChangeEvent<HTMLSelectElement>) => {
+    setSortBy(event.target.value as 'none' | 'price_asc' | 'price_desc' | 'rating_desc' | 'rating_asc' | 'name_asc');
   };
 
   // Check for existing session
@@ -1020,8 +1024,8 @@ function App() {
       {/* Results Section */}
       {viewMode === 'results' && (
         <main className="pt-24 pb-20 max-w-[1600px] mx-auto px-4 md:px-8 flex gap-8">
-           <div className="hidden lg:block w-64 flex-shrink-0 sticky top-24 h-[calc(100vh-8rem)]">
-              <div className="bg-white rounded-2xl p-6 border border-slate-100 shadow-sm h-full flex flex-col overflow-hidden">
+           <div className="hidden lg:block w-72 flex-shrink-0 sticky top-24 h-[calc(100vh-8rem)]">
+              <div className="bg-white rounded-2xl p-6 border border-slate-100 shadow-sm h-full flex flex-col overflow-hidden overflow-x-hidden">
                  <div className="flex items-center justify-between mb-6">
                     <div className="flex items-center gap-2 text-slate-900 font-bold">
                       <Filter size={18} /> Фильтры
@@ -1038,173 +1042,190 @@ function App() {
                       </button>
                     )}
                  </div>
-                 <div className="space-y-6 overflow-y-auto pr-1 custom-scrollbar min-h-0">
-                    <div>
-                       <label className="text-xs font-bold text-slate-500 uppercase mb-3 block">Цена, ₽</label>
-                       <div className="grid grid-cols-2 gap-2">
-                         <input
-                           type="text"
-                           inputMode="numeric"
-                           placeholder="От"
-                           value={minPriceInput}
-                           onChange={(event) => handlePriceInputChange(event, setMinPriceInput)}
-                           className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-slate-900/10 focus:border-slate-300"
-                         />
-                         <input
-                           type="text"
-                           inputMode="numeric"
-                           placeholder="До"
-                           value={maxPriceInput}
-                           onChange={(event) => handlePriceInputChange(event, setMaxPriceInput)}
-                           className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-slate-900/10 focus:border-slate-300"
-                         />
-                       </div>
-                       <div className="flex justify-between text-xs text-slate-500 mt-2 gap-2">
-                          <span>Показанный диапазон цен</span>
-                          <span className="text-right text-slate-600 font-medium">
-                            {priceBounds ? `${formatPrice(priceBounds.min)} - ${formatPrice(priceBounds.max)} ₽` : '--'}
-                          </span>
-                       </div>
-                       {normalizedPriceRange.isSwapped && (
-                         <p className="text-[11px] text-amber-600 mt-2">Минимум и максимум были автоматически поменяны местами.</p>
-                       )}
-                    </div>
-                    <div>
-                       <label className="text-xs font-bold text-slate-500 uppercase mb-3 block">Сортировка</label>
-                       <select
-                         value={sortBy}
-                         onChange={(event) =>
-                           setSortBy(
-                             event.target.value as
-                               | 'none'
-                               | 'price_asc'
-                               | 'price_desc'
-                               | 'rating_desc'
-                               | 'rating_asc'
-                               | 'name_asc'
-                           )
-                         }
-                         className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900 bg-white focus:outline-none focus:ring-2 focus:ring-slate-900/10 focus:border-slate-300"
-                       >
-                         <option value="none">По умолчанию</option>
-                         <option value="price_asc">Цена: по возрастанию</option>
-                         <option value="price_desc">Цена: по убыванию</option>
-                         <option value="rating_desc">Рейтинг: по убыванию</option>
-                         <option value="rating_asc">Рейтинг: по возрастанию</option>
-                         <option value="name_asc">Название (А-Я)</option>
-                       </select>
-                    </div>
-                    <div>
-                       <label className="text-xs font-bold text-slate-500 uppercase mb-2 block">Минимальный рейтинг</label>
-                       <input
-                         type="number"
-                         min={0}
-                         max={5}
-                         step={0.1}
-                         value={minRatingInput}
-                         onChange={(event) => setMinRatingInput(event.target.value.replace(',', '.'))}
-                         className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900 bg-white focus:outline-none focus:ring-2 focus:ring-slate-900/10 focus:border-slate-300"
-                       />
-                    </div>
-                    <div>
-                       <label className="text-xs font-bold text-slate-500 uppercase mb-2 block">Минимум отзывов</label>
-                       <input
-                         type="number"
-                         min={0}
-                         value={minReviewsInput}
-                         onChange={(event) => setMinReviewsInput(event.target.value.replace(/[^\d]/g, ''))}
-                         className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900 bg-white focus:outline-none focus:ring-2 focus:ring-slate-900/10 focus:border-slate-300"
-                       />
-                    </div>
-                    <div>
-                       <label className="text-xs font-bold text-slate-500 uppercase mb-2 block">Поиск по характеристикам</label>
-                       <input
-                         type="text"
-                         value={specSearchTerm}
-                         onChange={(event) => setSpecSearchTerm(event.target.value)}
-                         placeholder="Например: OLED, 16 ГБ, RTX"
-                         className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-slate-900/10 focus:border-slate-300"
-                       />
-                    </div>
+                 <div className="space-y-5 overflow-y-auto overflow-x-hidden pr-1 custom-scrollbar min-h-0">
                     <div className="space-y-2">
-                       <label className="flex items-center justify-between text-sm text-slate-700 cursor-pointer">
-                         <span className="flex items-center gap-2">
-                           <input
-                             type="checkbox"
-                             className="rounded border-slate-300 text-slate-900 focus:ring-slate-900"
-                             checked={onlyInStock}
-                             onChange={() => setOnlyInStock((prev) => !prev)}
-                           />
-                           Только в наличии
-
-                         </span>
-                       </label>
-                       <label className="flex items-center justify-between text-sm text-slate-700 cursor-pointer">
-                         <span className="flex items-center gap-2">
-                           <input
-                             type="checkbox"
-                             className="rounded border-slate-300 text-slate-900 focus:ring-slate-900"
-                             checked={onlyWithDiscount}
-                             onChange={() => setOnlyWithDiscount((prev) => !prev)}
-                           />
-                           Только со скидкой
-
-                         </span>
-                       </label>
-                       <label className="flex items-center justify-between text-sm text-slate-700 cursor-pointer">
-                         <span className="flex items-center gap-2">
-                           <input
-                             type="checkbox"
-                             className="rounded border-slate-300 text-slate-900 focus:ring-slate-900"
-                             checked={onlyWithReviews}
-                             onChange={() => setOnlyWithReviews((prev) => !prev)}
-                           />
-                           Только с отзывами
-
-                         </span>
-                       </label>
-                       <label className="flex items-center justify-between text-sm text-slate-700 cursor-pointer">
-                         <span className="flex items-center gap-2">
-                           <input
-                             type="checkbox"
-                             className="rounded border-slate-300 text-slate-900 focus:ring-slate-900"
-                             checked={onlyWithImages}
-                             onChange={() => setOnlyWithImages((prev) => !prev)}
-                           />
-                           Только с фото
-
-                         </span>
-                       </label>
+                      <label className="text-xs font-bold text-slate-500 uppercase">Сортировка</label>
+                      <select
+                        value={sortBy}
+                        onChange={handleSortChange}
+                        className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900 bg-white focus:outline-none focus:ring-2 focus:ring-slate-900/10 focus:border-slate-300"
+                      >
+                        <option value="none">Без сортировки</option>
+                        <option value="price_asc">Цена: по возрастанию</option>
+                        <option value="price_desc">Цена: по убыванию</option>
+                        <option value="rating_desc">Рейтинг: по убыванию</option>
+                        <option value="rating_asc">Рейтинг: по возрастанию</option>
+                        <option value="name_asc">Название: А-Я</option>
+                      </select>
                     </div>
-                    <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
-                       <div className="flex items-center justify-between text-xs text-slate-500">
-                         <span>Активные фильтры</span>
+                    <details open className="group border-b border-slate-100 pb-4">
+                      <summary className="flex items-center justify-between text-sm font-semibold text-slate-700 cursor-pointer list-none">
+                        <span>Цена</span>
+                        <ChevronDown size={16} className="text-slate-400 transition group-open:rotate-180" />
+                      </summary>
+                      <div className="pt-3 space-y-3">
+                        <div className="flex items-center gap-4">
+                          <label className="flex items-center gap-2 text-xs text-slate-500">
+                            <span className="text-[11px] font-semibold uppercase">От</span>
+                            <input
+                              type="text"
+                              inputMode="numeric"
+                              value={minPriceInput}
+                              onChange={(event) => handlePriceInputChange(event, setMinPriceInput)}
+                              placeholder={priceBounds ? formatPrice(priceBounds.min) : '0'}
+                              className="w-24 h-8 rounded-lg border border-slate-200 px-2 text-sm text-slate-900 bg-white focus:outline-none focus:ring-2 focus:ring-slate-900/10 focus:border-slate-300"
+                            />
+                            <span className="text-[11px] text-slate-400">₽</span>
+                          </label>
+                          <label className="flex items-center gap-2 text-xs text-slate-500">
+                            <span className="text-[11px] font-semibold uppercase">До</span>
+                            <input
+                              type="text"
+                              inputMode="numeric"
+                              value={maxPriceInput}
+                              onChange={(event) => handlePriceInputChange(event, setMaxPriceInput)}
+                              placeholder={priceBounds ? formatPrice(priceBounds.max) : '0'}
+                              className="w-24 h-8 rounded-lg border border-slate-200 px-2 text-sm text-slate-900 bg-white focus:outline-none focus:ring-2 focus:ring-slate-900/10 focus:border-slate-300"
+                            />
+                            <span className="text-[11px] text-slate-400">₽</span>
+                          </label>
+                        </div>
+                        {normalizedPriceRange.isSwapped && (
+                          <p className="text-[11px] text-amber-600">Минимум и максимум были автоматически поменяны местами.</p>
+                        )}
+                      </div>
+                    </details>
 
-                         <span className="font-bold text-slate-700">{activeFilterCount}</span>
-                       </div>
-                       <div className="flex items-center justify-between text-xs text-slate-500 mt-1">
-                         <span>Товаров после фильтрации</span>
+                    <details className="group border-b border-slate-100 pb-4">
+                      <summary className="flex items-center justify-between text-sm font-semibold text-slate-700 cursor-pointer list-none">
+                        <span>Рейтинг</span>
+                        <ChevronDown size={16} className="text-slate-400 transition group-open:rotate-180" />
+                      </summary>
+                      <div className="pt-3 space-y-3">
+                        <div className="flex items-center justify-between text-xs text-slate-500">
+                          <span>От {normalizedMinRating.toFixed(1)}</span>
+                          <span>{normalizedMinReviews} отзывов+</span>
+                        </div>
+                        <input
+                          type="range"
+                          min={0}
+                          max={5}
+                          step={0.1}
+                          value={normalizedMinRating}
+                          onChange={(event) => setMinRatingInput(event.target.value.replace(',', '.'))}
+                          className="w-full accent-slate-900"
+                        />
+                        <input
+                          type="number"
+                          min={0}
+                          value={minReviewsInput}
+                          onChange={(event) => setMinReviewsInput(event.target.value.replace(/[^\d]/g, ''))}
+                          placeholder="Минимум отзывов"
+                          className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-700 bg-white focus:outline-none focus:ring-2 focus:ring-slate-900/10 focus:border-slate-300"
+                        />
+                      </div>
+                    </details>
 
-                         <span className="font-bold text-slate-700">{filteredProducts.length}</span>
-                       </div>
-                    </div>
-                    <div>
-                       <div className="flex items-center justify-between mb-3">
-                          <label className="text-xs font-bold text-slate-500 uppercase">Категории</label>
-                          {selectedCategories.length > 0 && (
-                            <button
-                              type="button"
-                              onClick={() => setSelectedCategories([])}
-                              className="text-[11px] text-slate-500 hover:text-slate-700"
-                            >
-                              Сбросить
-
-                            </button>
+                    <details className="group border-b border-slate-100 pb-4">
+                      <summary className="flex items-center justify-between text-sm font-semibold text-slate-700 cursor-pointer list-none">
+                        <span>Производитель</span>
+                        <ChevronDown size={16} className="text-slate-400 transition group-open:rotate-180" />
+                      </summary>
+                      <div className="pt-3 space-y-3">
+                        <input
+                          type="text"
+                          value={brandSearchTerm}
+                          onChange={(event) => setBrandSearchTerm(event.target.value)}
+                          placeholder="Поиск бренда"
+                          className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-slate-900/10 focus:border-slate-300"
+                        />
+                        <div className="space-y-2 max-h-40 overflow-y-auto overflow-x-hidden pr-1">
+                          {filteredBrandStats.map(([brand, count]) => (
+                            <label key={brand} className="flex items-center justify-between gap-3 text-sm text-slate-700 cursor-pointer hover:text-slate-900">
+                              <span className="flex items-center gap-2">
+                                <input
+                                  type="checkbox"
+                                  className="rounded border-slate-300 text-slate-900 focus:ring-slate-900"
+                                  checked={selectedBrands.includes(brand)}
+                                  onChange={() => toggleBrandFilter(brand)}
+                                />
+                                {brand}
+                              </span>
+                              <span className="text-xs text-slate-400">{count}</span>
+                            </label>
+                          ))}
+                          {filteredBrandStats.length === 0 && (
+                            <div className="text-xs text-slate-400">Бренды не найдены.</div>
                           )}
-                       </div>
-                       <div className="space-y-2">
-                          {categoryStats.map(([category, count]) => (
-                             <label key={category} className="flex items-center justify-between gap-3 text-sm text-slate-700 cursor-pointer hover:text-slate-900">
+                        </div>
+                      </div>
+                    </details>
+
+                    <details className="group pb-2">
+                      <summary className="flex items-center justify-between text-sm font-semibold text-slate-700 cursor-pointer list-none">
+                        <span>Ещё фильтры</span>
+                        <ChevronDown size={16} className="text-slate-400 transition group-open:rotate-180" />
+                      </summary>
+                      <div className="pt-3 space-y-4">
+                        <input
+                          type="text"
+                          value={specSearchTerm}
+                          onChange={(event) => setSpecSearchTerm(event.target.value)}
+                          placeholder="Поиск по характеристикам"
+                          className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-slate-900/10 focus:border-slate-300"
+                        />
+                        <div className="space-y-2">
+                          <label className="flex items-center justify-between text-sm text-slate-700 cursor-pointer">
+                            <span className="flex items-center gap-2">
+                              <input
+                                type="checkbox"
+                                className="rounded border-slate-300 text-slate-900 focus:ring-slate-900"
+                                checked={onlyInStock}
+                                onChange={() => setOnlyInStock((prev) => !prev)}
+                              />
+                              Только в наличии
+                            </span>
+                          </label>
+                          <label className="flex items-center justify-between text-sm text-slate-700 cursor-pointer">
+                            <span className="flex items-center gap-2">
+                              <input
+                                type="checkbox"
+                                className="rounded border-slate-300 text-slate-900 focus:ring-slate-900"
+                                checked={onlyWithReviews}
+                                onChange={() => setOnlyWithReviews((prev) => !prev)}
+                              />
+                              Только с отзывами
+                            </span>
+                          </label>
+                          <label className="flex items-center justify-between text-sm text-slate-700 cursor-pointer">
+                            <span className="flex items-center gap-2">
+                              <input
+                                type="checkbox"
+                                className="rounded border-slate-300 text-slate-900 focus:ring-slate-900"
+                                checked={onlyWithImages}
+                                onChange={() => setOnlyWithImages((prev) => !prev)}
+                              />
+                              Только с фото
+                            </span>
+                          </label>
+                        </div>
+
+                        <div>
+                          <div className="flex items-center justify-between mb-2">
+                            <label className="text-xs font-bold text-slate-500 uppercase">Категории</label>
+                            {selectedCategories.length > 0 && (
+                              <button
+                                type="button"
+                                onClick={() => setSelectedCategories([])}
+                                className="text-[11px] text-slate-500 hover:text-slate-700"
+                              >
+                                Сбросить
+                              </button>
+                            )}
+                          </div>
+                          <div className="space-y-2">
+                            {categoryStats.map(([category, count]) => (
+                              <label key={category} className="flex items-center justify-between gap-3 text-sm text-slate-700 cursor-pointer hover:text-slate-900">
                                 <span className="flex items-center gap-2">
                                   <input
                                     type="checkbox"
@@ -1215,73 +1236,30 @@ function App() {
                                   {CATEGORY_LABELS[category]}
                                 </span>
                                 <span className="text-xs text-slate-400">{count}</span>
-                             </label>
-                          ))}
-                          {categoryStats.length === 0 && (
-                            <div className="text-xs text-slate-400">Категории появятся после поиска.</div>
-                          )}
-                       </div>
-                    </div>
-                    <div>
-                       <div className="flex items-center justify-between mb-3">
-                          <label className="text-xs font-bold text-slate-500 uppercase">Бренды</label>
-                          {selectedBrands.length > 0 && (
-                            <button
-                              type="button"
-                              onClick={() => setSelectedBrands([])}
-                              className="text-[11px] text-slate-500 hover:text-slate-700"
-                            >
-                              Сбросить
+                              </label>
+                            ))}
+                            {categoryStats.length === 0 && (
+                              <div className="text-xs text-slate-400">Категории появятся после поиска.</div>
+                            )}
+                          </div>
+                        </div>
 
-                            </button>
-                          )}
-                       </div>
-                       <div className="mb-3">
-                         <input
-                           type="text"
-                           value={brandSearchTerm}
-                           onChange={(event) => setBrandSearchTerm(event.target.value)}
-                           placeholder="Поиск бренда"
-                           className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-slate-900/10 focus:border-slate-300"
-                         />
-                       </div>
-                       <div className="space-y-2 max-h-40 overflow-y-auto pr-1">
-                          {filteredBrandStats.map(([brand, count]) => (
-                             <label key={brand} className="flex items-center justify-between gap-3 text-sm text-slate-700 cursor-pointer hover:text-slate-900">
-                                <span className="flex items-center gap-2">
-                                  <input
-                                    type="checkbox"
-                                    className="rounded border-slate-300 text-slate-900 focus:ring-slate-900"
-                                    checked={selectedBrands.includes(brand)}
-                                    onChange={() => toggleBrandFilter(brand)}
-                                  />
-                                  {brand}
-                                </span>
-                                <span className="text-xs text-slate-400">{count}</span>
-                             </label>
-                          ))}
-                          {filteredBrandStats.length === 0 && (
-                            <div className="text-xs text-slate-400">Бренды не найдены.</div>
-                          )}
-                       </div>
-                    </div>
-                    <div>
-                       <div className="flex items-center justify-between mb-3">
-                          <label className="text-xs font-bold text-slate-500 uppercase">Магазины</label>
-                          {selectedShops.length > 0 && (
-                            <button
-                              type="button"
-                              onClick={() => setSelectedShops([])}
-                              className="text-[11px] text-slate-500 hover:text-slate-700"
-                            >
-                              Сбросить
-
-                            </button>
-                          )}
-                       </div>
-                       <div className="space-y-2 max-h-40 overflow-y-auto pr-1">
-                          {shopStats.map(([shop, count]) => (
-                             <label key={shop} className="flex items-center justify-between gap-3 text-sm text-slate-700 cursor-pointer hover:text-slate-900">
+                        <div>
+                          <div className="flex items-center justify-between mb-2">
+                            <label className="text-xs font-bold text-slate-500 uppercase">Магазины</label>
+                            {selectedShops.length > 0 && (
+                              <button
+                                type="button"
+                                onClick={() => setSelectedShops([])}
+                                className="text-[11px] text-slate-500 hover:text-slate-700"
+                              >
+                                Сбросить
+                              </button>
+                            )}
+                          </div>
+                          <div className="space-y-2 max-h-40 overflow-y-auto overflow-x-hidden pr-1">
+                            {shopStats.map(([shop, count]) => (
+                              <label key={shop} className="flex items-center justify-between gap-3 text-sm text-slate-700 cursor-pointer hover:text-slate-900">
                                 <span className="flex items-center gap-2">
                                   <input
                                     type="checkbox"
@@ -1292,10 +1270,12 @@ function App() {
                                   {shop}
                                 </span>
                                 <span className="text-xs text-slate-400">{count}</span>
-                             </label>
-                          ))}
-                       </div>
-                    </div>
+                              </label>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+                    </details>
                  </div>
               </div>
            </div>
@@ -1312,19 +1292,28 @@ function App() {
               ) : (
                 <>
                   {searchTerm && filteredProducts.length > 0 && (
-                    <div className="mb-5 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm text-slate-700 shadow-sm">
-                       <div className="flex items-center gap-2">
-                          <span className="h-2 w-2 rounded-full bg-slate-900"></span>
-                          <span>
-                             Найдено{' '}
-                             <span className="font-semibold text-slate-900">{filteredProducts.length}</span> предложений
-                          </span>
+                    <div className="mb-6 rounded-2xl border border-slate-200 bg-gradient-to-br from-white to-slate-50 px-5 py-4 shadow-sm">
+                       <div className="flex flex-wrap items-center justify-between gap-4">
+                          <div className="flex items-center gap-4">
+                             <div className="w-12 h-12 rounded-2xl bg-slate-900 text-white flex items-center justify-center text-lg font-bold">
+                               {filteredProducts.length}
+                             </div>
+                             <div>
+                                <div className="text-[11px] uppercase tracking-wide text-slate-500 font-bold">Результаты</div>
+                                <div className="text-lg md:text-xl font-bold text-slate-900 leading-tight">
+                                  Найдено {filteredProducts.length} предложений
+                                </div>
+                                <div className="text-sm text-slate-500">по запросу «{searchTerm}»</div>
+                             </div>
+                          </div>
+                          <div className="flex items-center gap-2">
+                             {activeFilterCount > 0 && (
+                               <span className="px-3 py-1.5 rounded-full bg-white border border-slate-200 text-xs font-semibold text-slate-700">
+                                 Фильтры: {activeFilterCount}
+                               </span>
+                             )}
+                          </div>
                        </div>
-                       {activeFilterCount > 0 && (
-                         <span className="text-slate-500">
-                           Фильтры: <span className="font-semibold text-slate-900">{activeFilterCount}</span>
-                         </span>
-                       )}
                     </div>
                   )}
 
@@ -1733,12 +1722,6 @@ function App() {
                    </button>
                 </div>
              </div>
-             <button
-               onClick={closeProductPage}
-               className="absolute top-4 right-4 p-2 bg-slate-100 hover:bg-slate-200 rounded-full text-slate-500 hidden md:block z-50"
-             >
-                <X size={20} />
-             </button>
           </div>
         </main>
       )}
