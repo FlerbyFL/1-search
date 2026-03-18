@@ -1,15 +1,14 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { MOCK_PRODUCTS, SCENARIOS } from './constants';
-import { Product, User, Spec, Review, Scenario, Category } from './types';
+﻿import React, { useState, useEffect, useRef, useMemo } from 'react';
+import { MOCK_PRODUCTS } from './constants';
+import { Product, User, Spec, Review, Category } from './types';
 import ProductCard from './components/ProductCard';
 import AIAssistant from './components/AIAssistant';
 import ComparisonView from './components/ComparisonView';
 import PriceHistoryChart from './components/PriceHistoryChart';
 import UserDrawer from './components/UserDrawer';
 import AuthScreen from './components/AuthScreen';
-import ScenarioSelector from './components/ScenarioSelector';
 import { searchProductsWithAI } from './services/geminiService';
-import { Search, Bot, BarChart2, X, ArrowRight, ShieldCheck, Sparkles, ShoppingBag, Heart, Star, CheckCircle, Zap, TrendingDown, TrendingUp, Truck, ArrowLeft, Filter, ArrowUpRight, Store, Loader2, LogOut } from 'lucide-react';
+import { Search, Bot, BarChart2, X, ArrowRight, ShieldCheck, Sparkles, ShoppingBag, Heart, Star, CheckCircle, TrendingDown, Truck, ArrowLeft, Filter, ArrowUpRight, Store, Loader2, LogOut } from 'lucide-react';
 
 const CATEGORY_LABELS: Record<Category, string> = {
   smartphone: 'Смартфоны',
@@ -59,6 +58,126 @@ const getSpecsSearchBlob = (product: Product): string =>
     .join(' ')
     .toLowerCase();
 
+const normalizeProductKey = (value: string): string =>
+  value
+    .toLowerCase()
+    .replace(/[«»"']/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+const stripVariantColor = (value: string): string => {
+  const colorPattern =
+    /\b(черный|чёрный|белый|синий|голубой|зеленый|зелёный|красный|серый|серебристый|золотой|розовый|фиолетовый|желтый|жёлтый|оранжевый|коричневый|бежевый|мятный|лайм|графит|темно[-\s]?синий|темно[-\s]?серый|space\s?gray|space\s?black|midnight|starlight|graphite|silver|gold|black|white|blue|green|red|purple|pink|orange)\b$/i;
+  return value.replace(colorPattern, '').replace(/\s+/g, ' ').trim();
+};
+
+const extractVariantBaseName = (name: string): string => {
+  let base = name.trim();
+  const commaIndex = base.indexOf(',');
+  if (commaIndex !== -1) base = base.slice(0, commaIndex);
+
+  base = base
+    .replace(/\b\d+\s*\/\s*\d+\s*(gb|гб|tb|тб)\b/gi, '')
+    .replace(/\b\d+\s*(gb|гб|tb|тб|mb|мб)\b/gi, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  base = stripVariantColor(base);
+  return base;
+};
+
+const normalizeVariantKey = (name: string): string => normalizeProductKey(extractVariantBaseName(name));
+
+const getProductUrlKey = (product: Product): string => product.name?.trim() || product.id;
+
+type VariantAttributes = {
+  colorKey?: string;
+  colorLabel?: string;
+  colorHex?: string;
+  storage?: string;
+  storageGb?: number;
+  ram?: string;
+  ramGb?: number;
+};
+
+type MemoryValue = {
+  label: string;
+  gbValue: number;
+};
+
+const COLOR_DEFS = [
+  { key: 'black', label: 'Черный', hex: '#111827', aliases: ['черный', 'чёрный', 'black', 'space black', 'midnight', 'graphite'] },
+  { key: 'white', label: 'Белый', hex: '#f8fafc', aliases: ['белый', 'white', 'starlight'] },
+  { key: 'blue', label: 'Синий', hex: '#2563eb', aliases: ['синий', 'голубой', 'blue', 'sky', 'navy'] },
+  { key: 'green', label: 'Зеленый', hex: '#16a34a', aliases: ['зеленый', 'зелёный', 'green', 'mint', 'мятный', 'лайм', 'lime'] },
+  { key: 'red', label: 'Красный', hex: '#dc2626', aliases: ['красный', 'red'] },
+  { key: 'purple', label: 'Фиолетовый', hex: '#7c3aed', aliases: ['фиолетовый', 'purple', 'lavender', 'лаванда'] },
+  { key: 'pink', label: 'Розовый', hex: '#ec4899', aliases: ['розовый', 'pink'] },
+  { key: 'orange', label: 'Оранжевый', hex: '#f97316', aliases: ['оранжевый', 'orange'] },
+  { key: 'yellow', label: 'Желтый', hex: '#facc15', aliases: ['желтый', 'жёлтый', 'yellow'] },
+  { key: 'gray', label: 'Серый', hex: '#64748b', aliases: ['серый', 'gray', 'grey', 'серебристый', 'silver'] },
+  { key: 'gold', label: 'Золотой', hex: '#d4af37', aliases: ['золотой', 'gold'] },
+  { key: 'brown', label: 'Коричневый', hex: '#8b5e34', aliases: ['коричневый', 'brown', 'beige', 'бежевый'] },
+];
+
+const escapeRegExp = (value: string): string => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+const extractColorKey = (name: string): { key?: string; label?: string; hex?: string } => {
+  const lower = name.toLowerCase();
+  for (const color of COLOR_DEFS) {
+    for (const alias of color.aliases) {
+      const pattern = new RegExp(`\\b${escapeRegExp(alias)}\\b`, 'i');
+      if (pattern.test(lower)) {
+        return { key: color.key, label: color.label, hex: color.hex };
+      }
+    }
+  }
+  return {};
+};
+
+const parseMemoryValue = (value: string, unit: string): MemoryValue => {
+  const numeric = Number(value.replace(',', '.'));
+  const isTb = unit.toLowerCase().includes('t');
+  const labelUnit = isTb ? 'ТБ' : 'ГБ';
+  const gbValue = isTb ? numeric * 1024 : numeric;
+  return { label: `${numeric} ${labelUnit}`, gbValue };
+};
+
+const extractMemoryValues = (name: string): { ram?: MemoryValue; storage?: MemoryValue } => {
+  const combinedMatch = name.match(/(\d+(?:[.,]\d+)?)\s*\/\s*(\d+(?:[.,]\d+)?)\s*(gb|гб|tb|тб)/i);
+  if (combinedMatch) {
+    const ram = parseMemoryValue(combinedMatch[1], combinedMatch[3]);
+    const storage = parseMemoryValue(combinedMatch[2], combinedMatch[3]);
+    return { ram, storage };
+  }
+
+  const matches = [...name.matchAll(/(\d+(?:[.,]\d+)?)\s*(gb|гб|tb|тб)/gi)].map((m) =>
+    parseMemoryValue(m[1], m[2])
+  );
+  if (matches.length === 0) return {};
+
+  const sorted = matches.sort((a, b) => a.gbValue - b.gbValue);
+  const smallest = sorted[0];
+  const largest = sorted[sorted.length - 1];
+  const ram = smallest.gbValue <= 64 && sorted.length > 1 ? smallest : undefined;
+  const storage = largest;
+  return { ram, storage };
+};
+
+const extractVariantAttributes = (name: string): VariantAttributes => {
+  const color = extractColorKey(name);
+  const memory = extractMemoryValues(name);
+  return {
+    colorKey: color.key,
+    colorLabel: color.label,
+    colorHex: color.hex,
+    storage: memory.storage?.label,
+    storageGb: memory.storage?.gbValue,
+    ram: memory.ram?.label,
+    ramGb: memory.ram?.gbValue,
+  };
+};
+
 function App() {
   // Auth State
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -80,9 +199,12 @@ function App() {
   const [aiRecommendedIds, setAiRecommendedIds] = useState<string[]>([]);
   const [detailTab, setDetailTab] = useState<'overview' | 'reviews'>('overview');
   const [selectedProductImage, setSelectedProductImage] = useState('');
+  const [variantProducts, setVariantProducts] = useState<Product[]>([]);
+  const [isVariantsLoading, setIsVariantsLoading] = useState(false);
   
   // App Mode State
-  const [viewMode, setViewMode] = useState<'home' | 'results'>('home');
+  const [viewMode, setViewMode] = useState<'home' | 'results' | 'product'>('home');
+  const [lastListViewMode, setLastListViewMode] = useState<'home' | 'results'>('home');
   const [searchPlaceholder, setSearchPlaceholder] = useState('iPhone 15...');
   const [isUserDrawerOpen, setIsUserDrawerOpen] = useState(false);
 
@@ -98,8 +220,28 @@ function App() {
   const [specSearchTerm, setSpecSearchTerm] = useState('');
   const [onlyInStock, setOnlyInStock] = useState(false);
   const [onlyWithDiscount, setOnlyWithDiscount] = useState(false);
+  const [minReviewsInput, setMinReviewsInput] = useState('0');
+  const [onlyWithReviews, setOnlyWithReviews] = useState(false);
+  const [onlyWithImages, setOnlyWithImages] = useState(false);
+  const [brandSearchTerm, setBrandSearchTerm] = useState('');
   
   const searchInputRef = useRef<HTMLInputElement>(null);
+
+  const getProductKeyFromHash = () => {
+    const hash = window.location.hash || '';
+    const match = hash.match(/^#\/?product\/(.+)$/);
+    return match ? decodeURIComponent(match[1]) : null;
+  };
+
+  const setProductHash = (productKey: string | null, replace = false) => {
+    const hash = productKey ? `#/product/${encodeURIComponent(productKey)}` : '';
+    const url = `${window.location.pathname}${window.location.search}${hash}`;
+    if (replace) {
+      window.history.replaceState({}, '', url);
+    } else {
+      window.history.pushState({}, '', url);
+    }
+  };
 
   const categoryStats = useMemo(() => {
     const stats: Record<Category, number> = {
@@ -141,6 +283,12 @@ function App() {
     return [...stats.entries()].sort((a, b) => b[1] - a[1]);
   }, [products]);
 
+  const filteredBrandStats = useMemo(() => {
+    const needle = brandSearchTerm.trim().toLowerCase();
+    if (!needle) return brandStats;
+    return brandStats.filter(([brand]) => brand.toLowerCase().includes(needle));
+  }, [brandStats, brandSearchTerm]);
+
   const priceBounds = useMemo(() => {
     if (products.length === 0) return null;
     const prices = products.map((product) => product.price);
@@ -164,6 +312,17 @@ function App() {
     return Math.max(0, Math.min(5, rating));
   }, [minRatingInput]);
 
+  const normalizedMinReviews = useMemo(() => {
+    const value = Number(minReviewsInput);
+    if (!Number.isFinite(value)) return 0;
+    return Math.max(0, Math.floor(value));
+  }, [minReviewsInput]);
+
+  const hasRealImage = (product: Product): boolean => {
+    const images = [product.image, ...(product.images || [])].filter(Boolean);
+    return images.some((src) => src && src !== IMAGE_FALLBACK);
+  };
+
   const activeFilterCount = useMemo(() => {
     let count = selectedCategories.length;
     if (activeQuickFilter) count += 1;
@@ -172,9 +331,12 @@ function App() {
     if (selectedShops.length > 0) count += 1;
     if (selectedBrands.length > 0) count += 1;
     if (normalizedMinRating > 0) count += 1;
+    if (normalizedMinReviews > 0) count += 1;
     if (specSearchTerm.trim()) count += 1;
     if (onlyInStock) count += 1;
     if (onlyWithDiscount) count += 1;
+    if (onlyWithReviews) count += 1;
+    if (onlyWithImages) count += 1;
     return count;
   }, [
     selectedCategories.length,
@@ -184,9 +346,12 @@ function App() {
     selectedShops.length,
     selectedBrands.length,
     normalizedMinRating,
+    normalizedMinReviews,
     specSearchTerm,
     onlyInStock,
     onlyWithDiscount,
+    onlyWithReviews,
+    onlyWithImages,
   ]);
 
   const resetFilters = () => {
@@ -197,9 +362,13 @@ function App() {
     setMinPriceInput('');
     setMaxPriceInput('');
     setMinRatingInput('0');
+    setMinReviewsInput('0');
     setSpecSearchTerm('');
     setOnlyInStock(false);
     setOnlyWithDiscount(false);
+    setOnlyWithReviews(false);
+    setOnlyWithImages(false);
+    setBrandSearchTerm('');
     setSortBy('none');
   };
 
@@ -248,9 +417,12 @@ function App() {
       selectedShops.length > 0 ||
       selectedBrands.length > 0 ||
       normalizedMinRating > 0 ||
+      normalizedMinReviews > 0 ||
       hasSpecSearch ||
       onlyInStock ||
       onlyWithDiscount ||
+      onlyWithReviews ||
+      onlyWithImages ||
       Boolean(activeQuickFilter) ||
       hasPriceRangeFilter ||
       sortBy !== 'none';
@@ -295,6 +467,10 @@ function App() {
       result = result.filter((product) => product.rating >= normalizedMinRating);
     }
 
+    if (normalizedMinReviews > 0) {
+      result = result.filter((product) => product.reviewCount >= normalizedMinReviews);
+    }
+
     if (hasSpecSearch) {
       const specNeedle = specSearchTerm.trim().toLowerCase();
       result = result.filter((product) => getSpecsSearchBlob(product).includes(specNeedle));
@@ -306,6 +482,14 @@ function App() {
 
     if (onlyWithDiscount) {
       result = result.filter((product) => hasDiscount(product));
+    }
+
+    if (onlyWithReviews) {
+      result = result.filter((product) => product.reviewCount > 0);
+    }
+
+    if (onlyWithImages) {
+      result = result.filter((product) => hasRealImage(product));
     }
 
     if (activeQuickFilter) {
@@ -350,13 +534,39 @@ function App() {
     selectedBrands,
     normalizedPriceRange,
     normalizedMinRating,
+    normalizedMinReviews,
     specSearchTerm,
     onlyInStock,
     onlyWithDiscount,
+    onlyWithReviews,
+    onlyWithImages,
     sortBy,
     isSearching,
     viewMode,
   ]);
+
+  useEffect(() => {
+    const syncFromUrl = () => {
+      const productKey = getProductKeyFromHash();
+      if (!productKey) {
+        if (viewMode === 'product') {
+          closeProductPage({ skipUrl: true });
+        }
+        return;
+      }
+
+      if (selectedProduct && normalizeProductKey(selectedProduct.name) === normalizeProductKey(productKey)) return;
+      void openProductByKey(productKey, { pushUrl: false });
+    };
+
+    syncFromUrl();
+    window.addEventListener('hashchange', syncFromUrl);
+    window.addEventListener('popstate', syncFromUrl);
+    return () => {
+      window.removeEventListener('hashchange', syncFromUrl);
+      window.removeEventListener('popstate', syncFromUrl);
+    };
+  }, [viewMode, selectedProduct, products, lastListViewMode]);
 
   useEffect(() => {
     setVisibleCount(PAGE_SIZE);
@@ -368,9 +578,12 @@ function App() {
     minPriceInput,
     maxPriceInput,
     minRatingInput,
+    minReviewsInput,
     specSearchTerm,
     onlyInStock,
     onlyWithDiscount,
+    onlyWithReviews,
+    onlyWithImages,
     activeQuickFilter,
     sortBy,
     viewMode,
@@ -411,6 +624,18 @@ function App() {
     });
   };
 
+  const openProduct = (product: Product, options?: { pushUrl?: boolean }) => {
+    window.scrollTo({ top: 0, left: 0, behavior: 'auto' });
+    setLastListViewMode(viewMode === 'product' ? lastListViewMode : viewMode);
+    setViewMode('product');
+    setSelectedProduct(product);
+    setSelectedProductImage(product.images?.[0] || product.image || IMAGE_FALLBACK);
+    setDetailTab('overview');
+    if (options?.pushUrl !== false) {
+      setProductHash(getProductUrlKey(product));
+    }
+  };
+
   const handleProductSelect = (product: Product) => {
     if (user) {
         setUser(prev => {
@@ -421,9 +646,50 @@ function App() {
            };
         });
     }
-    setSelectedProduct(product);
-    setSelectedProductImage(product.images?.[0] || product.image || IMAGE_FALLBACK);
+    openProduct(product);
+  };
+
+  const closeProductPage = (options?: { skipUrl?: boolean }) => {
+    setSelectedProduct(null);
+    setSelectedProductImage('');
     setDetailTab('overview');
+    setViewMode(lastListViewMode);
+    if (!options?.skipUrl) {
+      setProductHash(null);
+    }
+  };
+
+  const openProductByKey = async (productKey: string, options?: { pushUrl?: boolean }) => {
+    if (!productKey) return;
+    const normalizedKey = normalizeProductKey(productKey);
+    const existing =
+      products.find((product) => product.id === productKey) ||
+      products.find((product) => normalizeProductKey(product.name) === normalizedKey);
+    if (existing) {
+      openProduct(existing, options);
+      return;
+    }
+
+    setIsSearching(true);
+    setSearchStatus('Загружаем карточку товара...');
+    const results = await searchProductsWithAI(productKey);
+    setIsSearching(false);
+    setSearchStatus('');
+
+    if (results.length > 0) {
+      setProducts(results);
+      const found =
+        results.find((product) => product.id === productKey) ||
+        results.find((product) => normalizeProductKey(product.name) === normalizedKey) ||
+        results[0];
+      openProduct(found, options);
+      return;
+    }
+
+    if (options?.pushUrl !== false) {
+      setProductHash(null, true);
+    }
+    setViewMode(lastListViewMode);
   };
 
   const selectedProductGallery = useMemo(() => {
@@ -441,6 +707,154 @@ function App() {
 
     return gallery.length > 0 ? gallery : [IMAGE_FALLBACK];
   }, [selectedProduct]);
+
+  const variantKey = useMemo(
+    () => (selectedProduct ? normalizeVariantKey(selectedProduct.name) : ''),
+    [selectedProduct?.name]
+  );
+
+  const variants = useMemo(() => {
+    if (!selectedProduct) return [];
+    const combined = [...variantProducts, ...products, selectedProduct];
+    const unique = new Map<string, Product>();
+    combined.forEach((product) => {
+      const key = normalizeProductKey(product.name);
+      if (!unique.has(key)) unique.set(key, product);
+    });
+    unique.set(normalizeProductKey(selectedProduct.name), selectedProduct);
+    const filtered = [...unique.values()].filter(
+      (product) =>
+        product.category === selectedProduct.category &&
+        normalizeVariantKey(product.name) === variantKey
+    );
+    return filtered.sort((a, b) => a.price - b.price);
+  }, [variantProducts, products, selectedProduct, variantKey]);
+
+  const variantInfos = useMemo(
+    () => variants.map((product) => ({ product, attrs: extractVariantAttributes(product.name) })),
+    [variants]
+  );
+
+  const selectedVariantAttrs = useMemo(
+    () => (selectedProduct ? extractVariantAttributes(selectedProduct.name) : {}),
+    [selectedProduct?.name]
+  );
+
+  const colorOptions = useMemo(() => {
+    const map = new Map<string, { key: string; label: string; hex: string; product: Product }>();
+    variantInfos.forEach(({ product, attrs }) => {
+      if (!attrs.colorKey) return;
+      if (!map.has(attrs.colorKey)) {
+        map.set(attrs.colorKey, {
+          key: attrs.colorKey,
+          label: attrs.colorLabel || attrs.colorKey,
+          hex: attrs.colorHex || '#e2e8f0',
+          product,
+        });
+      }
+    });
+    return [...map.values()];
+  }, [variantInfos]);
+
+  const storageOptions = useMemo(() => {
+    const map = new Map<string, MemoryValue>();
+    variantInfos.forEach(({ attrs }) => {
+      if (!attrs.storage || typeof attrs.storageGb !== 'number') return;
+      if (!map.has(attrs.storage)) {
+        map.set(attrs.storage, { label: attrs.storage, gbValue: attrs.storageGb });
+      }
+    });
+    return [...map.values()].sort((a, b) => a.gbValue - b.gbValue);
+  }, [variantInfos]);
+
+  const ramOptions = useMemo(() => {
+    const map = new Map<string, MemoryValue>();
+    variantInfos.forEach(({ attrs }) => {
+      if (!attrs.ram || typeof attrs.ramGb !== 'number') return;
+      if (!map.has(attrs.ram)) {
+        map.set(attrs.ram, { label: attrs.ram, gbValue: attrs.ramGb });
+      }
+    });
+    return [...map.values()].sort((a, b) => a.gbValue - b.gbValue);
+  }, [variantInfos]);
+
+  const showVariantFallback = useMemo(
+    () => colorOptions.length === 0 && storageOptions.length <= 1 && ramOptions.length <= 1,
+    [colorOptions.length, storageOptions.length, ramOptions.length]
+  );
+
+  const selectVariant = (next: Partial<VariantAttributes>) => {
+    if (!variantInfos.length) return;
+    const desired = {
+      colorKey: next.colorKey ?? selectedVariantAttrs.colorKey,
+      storage: next.storage ?? selectedVariantAttrs.storage,
+      ram: next.ram ?? selectedVariantAttrs.ram,
+    };
+
+    const match = (attrs: VariantAttributes, requireAll = true) => {
+      const checks = [
+        desired.colorKey ? attrs.colorKey === desired.colorKey : !requireAll,
+        desired.storage ? attrs.storage === desired.storage : !requireAll,
+        desired.ram ? attrs.ram === desired.ram : !requireAll,
+      ];
+      return checks.every(Boolean);
+    };
+
+    let found = variantInfos.find(({ attrs }) => match(attrs, true));
+    if (!found && desired.colorKey && desired.storage) {
+      found = variantInfos.find(({ attrs }) => attrs.colorKey === desired.colorKey && attrs.storage === desired.storage);
+    }
+    if (!found && desired.colorKey && desired.ram) {
+      found = variantInfos.find(({ attrs }) => attrs.colorKey === desired.colorKey && attrs.ram === desired.ram);
+    }
+    if (!found && desired.storage && desired.ram) {
+      found = variantInfos.find(({ attrs }) => attrs.storage === desired.storage && attrs.ram === desired.ram);
+    }
+    if (!found && desired.colorKey) {
+      found = variantInfos.find(({ attrs }) => attrs.colorKey === desired.colorKey);
+    }
+    if (!found && desired.storage) {
+      found = variantInfos.find(({ attrs }) => attrs.storage === desired.storage);
+    }
+    if (!found && desired.ram) {
+      found = variantInfos.find(({ attrs }) => attrs.ram === desired.ram);
+    }
+    if (!found) found = variantInfos[0];
+
+    if (found) {
+      openProduct(found.product);
+    }
+  };
+
+  useEffect(() => {
+    if (!selectedProduct) {
+      setVariantProducts([]);
+      return;
+    }
+    let isActive = true;
+
+    const loadVariants = async () => {
+      const baseQuery = extractVariantBaseName(selectedProduct.name) || selectedProduct.name;
+      setIsVariantsLoading(true);
+      try {
+        const results = await searchProductsWithAI(baseQuery);
+        if (!isActive) return;
+        const filtered = results.filter(
+          (product) =>
+            product.category === selectedProduct.category &&
+            normalizeVariantKey(product.name) === normalizeVariantKey(selectedProduct.name)
+        );
+        setVariantProducts(filtered);
+      } finally {
+        if (isActive) setIsVariantsLoading(false);
+      }
+    };
+
+    loadVariants();
+    return () => {
+      isActive = false;
+    };
+  }, [selectedProduct?.name, selectedProduct?.category]);
 
   const handleToggleLike = (e: React.MouseEvent, product: Product) => {
     e.stopPropagation();
@@ -460,11 +874,6 @@ function App() {
     });
   };
 
-  const handleScenarioSelect = (scenario: Scenario) => {
-     setSearchTerm(scenario.label + " ");
-     searchInputRef.current?.focus();
-  };
-
   const handleAIRecommend = (ids: string[]) => {
     setAiRecommendedIds(ids);
     if (ids.length > 0 && viewMode === 'home') {
@@ -476,6 +885,7 @@ function App() {
     e.preventDefault();
     if (!searchTerm.trim()) return;
 
+    setProductHash(null, true);
     setViewMode('results');
     resetFilters();
     setIsSearching(true);
@@ -523,13 +933,13 @@ function App() {
       <div className={`fixed inset-0 -z-10 bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-slate-100 via-white to-white pointer-events-none transition-opacity duration-1000 ${viewMode === 'home' ? 'opacity-100' : 'opacity-0'}`}></div>
 
       {/* Navbar */}
-      <header className={`fixed top-0 inset-x-0 h-16 z-40 transition-all duration-500 ${viewMode === 'results' ? 'bg-white/80 backdrop-blur-xl border-b border-slate-200' : 'bg-transparent'}`}>
+      <header className={`fixed top-0 inset-x-0 h-16 z-40 transition-all duration-500 ${viewMode === 'results' || viewMode === 'product' ? 'bg-white/90 backdrop-blur-xl border-b border-slate-200' : 'bg-transparent'}`}>
         <div className="max-w-7xl mx-auto px-4 h-full flex items-center justify-between">
-          <div className="flex items-center gap-2 cursor-pointer" onClick={() => { setViewMode('home'); setSearchTerm(''); setProducts(MOCK_PRODUCTS); resetFilters(); }}>
+          <div className="flex items-center gap-2 cursor-pointer" onClick={() => { setProductHash(null, true); setViewMode('home'); setSearchTerm(''); setProducts(MOCK_PRODUCTS); resetFilters(); }}>
             <div className="w-8 h-8 bg-slate-900 rounded-lg flex items-center justify-center text-lime-400 font-bold shadow-lg shadow-slate-900/20">
               1S
             </div>
-            <span className="font-bold text-lg tracking-tight text-slate-900">OneSearch</span>
+            <span className="font-bold text-lg tracking-tight text-slate-900">Единный поиск</span>
           </div>
 
           {viewMode === 'results' && (
@@ -603,37 +1013,7 @@ function App() {
                     </button>
                  </div>
               </form>
-
-              <div className="mt-8 animate-in fade-in slide-in-from-bottom-4 duration-1000 delay-200">
-                <ScenarioSelector 
-                  scenarios={SCENARIOS} 
-                  activeId={null} 
-                  onSelect={handleScenarioSelect} 
-                />
-              </div>
-
-              <div className="flex flex-wrap items-center justify-center gap-3">
-                 {[
-                    { id: 'price_low', label: 'Низкая цена', icon: <TrendingDown size={14} /> },
-                    { id: 'price_high', label: 'Высокая цена', icon: <TrendingUp size={14} /> },
-                    { id: 'delivery', label: 'Быстрая доставка', icon: <Truck size={14} /> },
-                    { id: 'rating', label: 'Рейтинг', icon: <Star size={14} /> },
-                    { id: 'deals', label: 'Скидки', icon: <Zap size={14} /> }
-                 ].map(filter => (
-                    <button 
-                       key={filter.id}
-                       onClick={() => { setActiveQuickFilter(prev => prev === filter.id ? null : filter.id); setViewMode('results'); }}
-                       className={`flex items-center gap-2 px-4 py-2 rounded-full border text-sm font-medium transition-all ${
-                          activeQuickFilter === filter.id 
-                             ? 'bg-slate-900 text-white border-slate-900' 
-                             : 'bg-white text-slate-600 border-slate-200 hover:border-slate-300 hover:bg-slate-50'
-                       }`}
-                    >
-                       {filter.icon} {filter.label}
-                    </button>
-                 ))}
-              </div>
-           </div>
+</div>
         </main>
       )}
 
@@ -727,6 +1107,16 @@ function App() {
                        />
                     </div>
                     <div>
+                       <label className="text-xs font-bold text-slate-500 uppercase mb-2 block">Минимум отзывов</label>
+                       <input
+                         type="number"
+                         min={0}
+                         value={minReviewsInput}
+                         onChange={(event) => setMinReviewsInput(event.target.value.replace(/[^\d]/g, ''))}
+                         className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900 bg-white focus:outline-none focus:ring-2 focus:ring-slate-900/10 focus:border-slate-300"
+                       />
+                    </div>
+                    <div>
                        <label className="text-xs font-bold text-slate-500 uppercase mb-2 block">Поиск по характеристикам</label>
                        <input
                          type="text"
@@ -758,6 +1148,30 @@ function App() {
                              onChange={() => setOnlyWithDiscount((prev) => !prev)}
                            />
                            Только со скидкой
+
+                         </span>
+                       </label>
+                       <label className="flex items-center justify-between text-sm text-slate-700 cursor-pointer">
+                         <span className="flex items-center gap-2">
+                           <input
+                             type="checkbox"
+                             className="rounded border-slate-300 text-slate-900 focus:ring-slate-900"
+                             checked={onlyWithReviews}
+                             onChange={() => setOnlyWithReviews((prev) => !prev)}
+                           />
+                           Только с отзывами
+
+                         </span>
+                       </label>
+                       <label className="flex items-center justify-between text-sm text-slate-700 cursor-pointer">
+                         <span className="flex items-center gap-2">
+                           <input
+                             type="checkbox"
+                             className="rounded border-slate-300 text-slate-900 focus:ring-slate-900"
+                             checked={onlyWithImages}
+                             onChange={() => setOnlyWithImages((prev) => !prev)}
+                           />
+                           Только с фото
 
                          </span>
                        </label>
@@ -822,8 +1236,17 @@ function App() {
                             </button>
                           )}
                        </div>
+                       <div className="mb-3">
+                         <input
+                           type="text"
+                           value={brandSearchTerm}
+                           onChange={(event) => setBrandSearchTerm(event.target.value)}
+                           placeholder="Поиск бренда"
+                           className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-slate-900/10 focus:border-slate-300"
+                         />
+                       </div>
                        <div className="space-y-2 max-h-40 overflow-y-auto pr-1">
-                          {brandStats.map(([brand, count]) => (
+                          {filteredBrandStats.map(([brand, count]) => (
                              <label key={brand} className="flex items-center justify-between gap-3 text-sm text-slate-700 cursor-pointer hover:text-slate-900">
                                 <span className="flex items-center gap-2">
                                   <input
@@ -837,6 +1260,9 @@ function App() {
                                 <span className="text-xs text-slate-400">{count}</span>
                              </label>
                           ))}
+                          {filteredBrandStats.length === 0 && (
+                            <div className="text-xs text-slate-400">Бренды не найдены.</div>
+                          )}
                        </div>
                     </div>
                     <div>
@@ -886,16 +1312,19 @@ function App() {
               ) : (
                 <>
                   {searchTerm && filteredProducts.length > 0 && (
-                    <div className="mb-6 bg-gradient-to-r from-slate-900 to-slate-800 rounded-2xl p-1 shadow-lg text-white">
-                       <div className="bg-slate-900/50 backdrop-blur-sm rounded-xl px-4 py-3 flex items-center gap-3">
-                          <div className="bg-lime-400 text-slate-900 p-1.5 rounded-lg">
-                             <Sparkles size={16} />
-                          </div>
-                          <span className="text-sm font-medium">
-                             Найдено <strong>{filteredProducts.length}</strong> актуальных предложений из интернет-магазинов.
-
+                    <div className="mb-5 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm text-slate-700 shadow-sm">
+                       <div className="flex items-center gap-2">
+                          <span className="h-2 w-2 rounded-full bg-slate-900"></span>
+                          <span>
+                             Найдено{' '}
+                             <span className="font-semibold text-slate-900">{filteredProducts.length}</span> предложений
                           </span>
                        </div>
+                       {activeFilterCount > 0 && (
+                         <span className="text-slate-500">
+                           Фильтры: <span className="font-semibold text-slate-900">{activeFilterCount}</span>
+                         </span>
+                       )}
                     </div>
                   )}
 
@@ -971,32 +1400,23 @@ function App() {
         onRecommend={handleAIRecommend}
       />
 
-      {/* Product Detail Modal - IMPROVED SCROLLING ARCHITECTURE */}
-      {selectedProduct && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6">
-          <div
-            className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm transition-opacity"
-            onClick={() => {
-              setSelectedProduct(null);
-              setSelectedProductImage('');
-            }}
-          />
-          
-          <div className="relative bg-white rounded-3xl w-full max-w-6xl shadow-2xl flex flex-col md:flex-row animate-in zoom-in-95 duration-200 overflow-hidden h-[90vh] md:h-[85vh]">
-             
+      {/* Product Detail Page */}
+      {viewMode === 'product' && selectedProduct && (
+        <main className="pt-24 pb-20 max-w-6xl mx-auto px-4 md:px-6">
+          <div className="mb-6">
+            <button
+              onClick={closeProductPage}
+              className="flex items-center gap-2 text-sm font-medium text-slate-600 hover:text-slate-900"
+            >
+              <ArrowLeft size={18} /> Назад к результатам
+            </button>
+          </div>
+
+          <div className="relative bg-white rounded-3xl w-full max-w-6xl shadow-2xl flex flex-col md:flex-row overflow-hidden border border-slate-100">
+
              {/* Left: Images & Store Matrix */}
-             {/* Mobile: 40% height. Desktop: 5/12 width. Independent scroll. */}
-             <div className="h-[40%] md:h-full w-full md:w-5/12 bg-slate-50 border-b md:border-b-0 md:border-r border-slate-100 flex flex-col overflow-y-auto custom-scrollbar flex-shrink-0">
+             <div className="w-full md:w-5/12 bg-slate-50 border-b md:border-b-0 md:border-r border-slate-100 flex flex-col">
                 <div className="p-8 aspect-square flex items-center justify-center relative bg-white flex-shrink-0 border-b border-slate-50">
-                    <button 
-                       onClick={() => {
-                         setSelectedProduct(null);
-                         setSelectedProductImage('');
-                       }}
-                       className="absolute top-4 left-4 p-2 bg-slate-100 hover:bg-slate-200 rounded-full text-slate-600 md:hidden z-10"
-                    >
-                       <X size={20} />
-                    </button>
                     <img 
                        src={selectedProductImage || selectedProductGallery[0]} 
                        alt={selectedProduct.name} 
@@ -1074,10 +1494,8 @@ function App() {
              </div>
 
              {/* Right: Details */}
-             {/* Mobile: 60% height. Desktop: Flex-1 width. Independent scroll. */}
-             <div className="h-[60%] md:h-full flex-1 flex flex-col bg-white overflow-hidden relative min-h-0">
-                
-                <div className="flex-1 overflow-y-auto p-8 custom-scrollbar">
+             <div className="flex-1 bg-white">
+                <div className="p-8">
                    <div className="flex justify-between items-start mb-4">
                       <div>
                          <h2 className="text-3xl font-bold text-slate-900 mb-2">{selectedProduct.name}</h2>
@@ -1102,8 +1520,132 @@ function App() {
                           </button>
                       </div>
                    </div>
+
+                   {(variants.length > 1 || isVariantsLoading) && (
+                     <div className="mb-6 space-y-4">
+                       <div className="flex items-center justify-between">
+                         <h4 className="text-xs font-bold text-slate-500 uppercase">Варианты</h4>
+                         {isVariantsLoading && (
+                           <span className="text-xs text-slate-400">Загружаем варианты...</span>
+                         )}
+                       </div>
+
+                       {colorOptions.length > 0 && (
+                         <div>
+                           <div className="text-xs font-semibold text-slate-500 mb-2">
+                             Цвет: <span className="text-slate-900">{selectedVariantAttrs.colorLabel || '—'}</span>
+                           </div>
+                           <div className="flex flex-wrap gap-2">
+                             {colorOptions.map((option) => {
+                               const isActive = option.key === selectedVariantAttrs.colorKey;
+                               return (
+                                 <button
+                                   key={option.key}
+                                   type="button"
+                                   onClick={() => selectVariant({ colorKey: option.key })}
+                                   className={`w-12 h-12 rounded-xl border transition flex items-center justify-center overflow-hidden ${
+                                     isActive ? 'border-slate-900 ring-2 ring-slate-900/20' : 'border-slate-200 hover:border-slate-300'
+                                   }`}
+                                   title={option.label}
+                                 >
+                                   <img
+                                     src={option.product.image}
+                                     alt={option.label}
+                                     className="w-full h-full object-contain mix-blend-multiply"
+                                     onError={(e) => {
+                                       if (e.currentTarget.src !== IMAGE_FALLBACK) {
+                                         e.currentTarget.src = IMAGE_FALLBACK;
+                                       }
+                                     }}
+                                   />
+                                 </button>
+                               );
+                             })}
+                           </div>
+                         </div>
+                       )}
+
+                       {storageOptions.length > 1 && (
+                         <div>
+                           <div className="text-xs font-semibold text-slate-500 mb-2">
+                             Объем встроенной памяти:{' '}
+                             <span className="text-slate-900">{selectedVariantAttrs.storage || '—'}</span>
+                           </div>
+                           <div className="flex flex-wrap gap-2">
+                             {storageOptions.map((option) => {
+                               const isActive = option.label === selectedVariantAttrs.storage;
+                               return (
+                                 <button
+                                   key={option.label}
+                                   type="button"
+                                   onClick={() => selectVariant({ storage: option.label })}
+                                   className={`px-3 py-2 rounded-lg text-sm font-semibold border transition ${
+                                     isActive
+                                       ? 'border-slate-900 text-slate-900 bg-slate-50'
+                                       : 'border-slate-200 text-slate-600 hover:border-slate-300'
+                                   }`}
+                                 >
+                                   {option.label}
+                                 </button>
+                               );
+                             })}
+                           </div>
+                         </div>
+                       )}
+
+                       {ramOptions.length > 1 && (
+                         <div>
+                           <div className="text-xs font-semibold text-slate-500 mb-2">
+                             Объем оперативной памяти:{' '}
+                             <span className="text-slate-900">{selectedVariantAttrs.ram || '—'}</span>
+                           </div>
+                           <div className="flex flex-wrap gap-2">
+                             {ramOptions.map((option) => {
+                               const isActive = option.label === selectedVariantAttrs.ram;
+                               return (
+                                 <button
+                                   key={option.label}
+                                   type="button"
+                                   onClick={() => selectVariant({ ram: option.label })}
+                                   className={`px-3 py-2 rounded-lg text-sm font-semibold border transition ${
+                                     isActive
+                                       ? 'border-slate-900 text-slate-900 bg-slate-50'
+                                       : 'border-slate-200 text-slate-600 hover:border-slate-300'
+                                   }`}
+                                 >
+                                   {option.label}
+                                 </button>
+                               );
+                             })}
+                           </div>
+                         </div>
+                       )}
+
+                       {showVariantFallback && (
+                         <div className="flex flex-wrap gap-2">
+                           {variants.map((variant) => {
+                             const isActive = variant.id === selectedProduct.id;
+                             return (
+                               <button
+                                 key={variant.id}
+                                 type="button"
+                                 onClick={() => openProduct(variant)}
+                                 className={`px-3 py-2 rounded-lg text-xs font-semibold border transition ${
+                                   isActive
+                                     ? 'border-slate-900 text-slate-900 bg-slate-50'
+                                     : 'border-slate-200 text-slate-600 hover:border-slate-300'
+                                 }`}
+                               >
+                                 {variant.name}
+                               </button>
+                             );
+                           })}
+                         </div>
+                       )}
+                     </div>
+                   )}
                    
-                   <div className="flex gap-6 border-b border-slate-100 mb-6 sticky top-0 bg-white z-10 pt-2">
+                   <div className="flex gap-6 border-b border-slate-100 mb-6">
                       <button onClick={() => setDetailTab('overview')} className={`pb-3 text-sm font-bold border-b-2 transition-colors ${detailTab === 'overview' ? 'border-slate-900 text-slate-900' : 'border-transparent text-slate-400'}`}>Обзор</button>
                       <button onClick={() => setDetailTab('reviews')} className={`pb-3 text-sm font-bold border-b-2 transition-colors ${detailTab === 'reviews' ? 'border-slate-900 text-slate-900' : 'border-transparent text-slate-400'}`}>Отзывы</button>
                    </div>
@@ -1178,7 +1720,7 @@ function App() {
                    )}
                 </div>
 
-                <div className="p-6 border-t border-slate-100 flex items-center justify-between bg-slate-50 z-20 flex-shrink-0">
+                <div className="p-6 border-t border-slate-100 flex items-center justify-between bg-slate-50">
                    <div>
                       <div className="text-xs text-slate-500 font-bold uppercase">Лучшая цена</div>
                       <div className="text-3xl font-bold text-slate-900">{formatPrice(selectedProduct.price)} ₽</div>
@@ -1191,18 +1733,14 @@ function App() {
                    </button>
                 </div>
              </div>
-
              <button
-               onClick={() => {
-                 setSelectedProduct(null);
-                 setSelectedProductImage('');
-               }}
+               onClick={closeProductPage}
                className="absolute top-4 right-4 p-2 bg-slate-100 hover:bg-slate-200 rounded-full text-slate-500 hidden md:block z-50"
              >
                 <X size={20} />
              </button>
           </div>
-        </div>
+        </main>
       )}
 
       {user && (
@@ -1214,3 +1752,7 @@ function App() {
 }
 
 export default App;
+
+
+
+

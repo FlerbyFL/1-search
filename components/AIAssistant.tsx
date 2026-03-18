@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+﻿import React, { useState, useRef, useEffect } from 'react';
 import { Send, X, Sparkles, Loader2, Bot } from 'lucide-react';
 import { ChatMessage, Product } from '../types';
 import { getAIRecommendation } from '../services/geminiService';
@@ -16,7 +16,7 @@ const AIAssistant: React.FC<AIAssistantProps> = ({ isOpen, onClose, products, on
     {
       id: 'welcome',
       role: 'model',
-      text: 'Привет! Я ваш **ассистент OneSearch**.\n\nСпросите меня о товарах, характеристиках или скидках (например: *"Самый дешевый игровой ноутбук с RTX 4070"*).',
+      text: 'Привет! Я ваш **ассистент Единный поиск**.\n\nСпросите меня о товарах, характеристиках или скидках (например: *"Самый дешевый игровой ноутбук с RTX 4070"*).',
       timestamp: Date.now(),
     },
   ]);
@@ -166,3 +166,7 @@ const AIAssistant: React.FC<AIAssistantProps> = ({ isOpen, onClose, products, on
 };
 
 export default AIAssistant;
+
+
+
+

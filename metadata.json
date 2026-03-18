@@ -1,5 +1,7 @@
-{
-  "name": "NexKatalog - AI Product Comparison",
+﻿{
+  "name": "Единный поиск",
   "description": "A next-generation product comparison platform inspired by eKatalog. Features AI-driven recommendations, scenario-based filtering, and real-time price aggregation simulations.",
   "requestFramePermissions": []
 }
+
+
