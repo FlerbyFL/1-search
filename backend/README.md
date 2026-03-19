@@ -1,134 +1,121 @@
-# Price Parser Backend
+﻿# Backend (API + Parser)
 
-Этот бэкенд состоит из 3 сервисов:
-- `db` (PostgreSQL 16)
-- `parser` (Go worker + Python Playwright скрипт)
-- `api` (Go + Gin HTTP API)
+Backend состоит из трех сервисов:
+- `db` — PostgreSQL 16.
+- `api` — Go + Gin (REST API).
+- `parser` — Go scheduler + Python Playwright (Citilink).
 
-Парсер собирает товары (сейчас из Citilink), сохраняет данные в PostgreSQL, а API отдает их клиентам.
+**Порты**
+- API: `8081` на хосте, `8080` внутри контейнера.
+- PostgreSQL: `5431` на хосте, `5432` внутри контейнера.
 
-## Что реализовано
+**Запуск через Docker (рекомендуется)**
+```powershell
+cd backend
+docker compose up -d --build
+```
 
-- Автомиграции БД при старте `parser`.
-- Периодический парсинг категорий.
-- Upsert товаров и сохранение истории цен.
-- REST-эндпоинты:
+Проверка API:
+```powershell
+Invoke-WebRequest http://localhost:8081/health -UseBasicParsing
+```
+
+Остановка:
+```powershell
+cd backend
+docker compose down
+```
+
+Полный сброс БД:
+```powershell
+cd backend
+docker compose down -v
+```
+
+**Переменные окружения (API)**
+Используются в `parser/apiserver/server.go`.
+
+| Переменная | По умолчанию | Описание |
+| --- | --- | --- |
+| `DB_HOST` | `localhost` | Хост PostgreSQL. |
+| `DB_PORT` | `5431` | Порт PostgreSQL на хосте. |
+| `DB_USER` | `postgres` | Пользователь БД. |
+| `DB_PASSWORD` | пусто | Пароль БД. |
+| `DB_NAME` | `priceparser` | Имя базы. |
+| `PORT` | `8080` | Порт API сервера. |
+| `DEBUG` | `false` | Подробные логи. |
+| `AVATAR_DIR` | `storage/avatars` | Каталог для аватаров. |
+
+**Переменные окружения (Parser)**
+Используются в `parser/cmd/main.go` и `parser/browser.py`.
+
+| Переменная | По умолчанию | Описание |
+| --- | --- | --- |
+| `DB_HOST` | `localhost` | Хост PostgreSQL. |
+| `DB_PORT` | `5431` | Порт PostgreSQL на хосте. |
+| `DB_USER` | `postgres` | Пользователь БД. |
+| `DB_PASSWORD` | пусто | Пароль БД. |
+| `DB_NAME` | `priceparser` | Имя базы. |
+| `IMAGES_DIR` | `./images` | Каталог для картинок. |
+| `CONCURRENCY` | `1` | Одновременные парсеры. |
+| `ONCE` | `false` | Один цикл и выход. |
+| `DEBUG` | `false` | Подробные логи. |
+| `SCRIPT_PATH` | `browser.py` | Путь к Playwright-скрипту. |
+| `CITILINK_SPACE` | пусто | Пространство Citilink (по умолчанию `msk_cl`). |
+| `CITILINK_CITY` | пусто | Город для подбора `space`. |
+| `CITILINK_CITY_REGION` | пусто | Регион для уточнения города. |
+| `CITILINK_REVIEWS_PRODUCTS` | `30` | Сколько товаров дополнять отзывами. |
+| `CITILINK_REVIEWS_LIMIT` | `10` | Лимит отзывов на товар. |
+
+**API кратко**
+Базовый URL (Docker): `http://localhost:8081`.
+
 - `GET /health`
 - `GET /api/v1/products`
 - `GET /api/v1/products/search`
 - `GET /api/v1/categories`
+- `GET /api/v1/products/:id/reviews`
+- `GET /api/v1/images/proxy?url=...`
+- `POST /api/v1/auth/register`
+- `POST /api/v1/auth/login`
+- `GET /api/v1/users/:id`
+- `PATCH /api/v1/users/:id`
+- `PATCH /api/v1/users/:id/profile`
+- `POST /api/v1/users/:id/avatar`
 
-## Быстрый старт (Docker)
+Полное описание параметров и форматов в `README.md`.
 
-Требования:
-- Docker Desktop с Compose v2
+**Схема БД**
+Создается автоматически при старте (`parser/internal/db/db.go`).
 
-Запуск:
+Таблицы:
+- `products`
+- `product_images`
+- `price_history`
+- `product_specs`
+- `product_reviews`
+- `users`
 
+**Парсер**
+Парсер запускается по расписанию (по умолчанию каждые 6 часов). Список категорий находится в `parser/internal/scheduler/scheduler.go`.
+
+Запуск одного цикла в контейнере:
 ```powershell
-docker-compose up --build -d
+cd backend
+docker compose exec parser /app/parser -once
 ```
 
-Проверка контейнеров:
-
+**Локальный запуск без Docker (опционально)**
+1. Поднять PostgreSQL локально.
+2. Запустить API:
 ```powershell
-docker ps --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
+cd backend
+go run ./api/cmd/api
 ```
-
-Проверка API:
-
+3. Запустить парсер:
 ```powershell
-Invoke-RestMethod -Uri http://localhost:8080/health
+cd backend
+go run ./parser/cmd
 ```
 
-Остановка:
-
-```powershell
-docker-compose down
-```
-
-Остановка с удалением volume БД (полный сброс данных):
-
-```powershell
-docker-compose down -v
-```
-
-## API
-
-Базовый URL: `http://localhost:8080`
-
-### `GET /health`
-
-```powershell
-Invoke-RestMethod -Uri http://localhost:8080/health
-```
-
-### `GET /api/v1/products`
-
-Параметры запроса:
-- `category` (string, частичное совпадение по имени товара)
-- `brand` (string, точное совпадение без учета регистра)
-- `shop` (string)
-- `min_price` (number)
-- `max_price` (number)
-- `page` (int, по умолчанию `1`)
-- `limit` (int, по умолчанию `20`, максимум `100`)
-
-Пример:
-
-```powershell
-Invoke-RestMethod -Uri "http://localhost:8080/api/v1/products?shop=citilink&min_price=10000&max_price=200000&page=1&limit=5"
-```
-
-### `GET /api/v1/products/search`
-
-Параметры запроса:
-- `q` (string, обязательный)
-- `limit` (int, по умолчанию `20`, максимум `100`)
-
-Пример:
-
-```powershell
-Invoke-RestMethod -Uri "http://localhost:8080/api/v1/products/search?q=iphone&limit=5"
-```
-
-### `GET /api/v1/categories`
-
-Пример:
-
-```powershell
-Invoke-RestMethod -Uri "http://localhost:8080/api/v1/categories"
-```
-
-## Формат ответа товаров
-
-Сейчас поля товара возвращаются с именами Go-структуры (`ID`, `Name`, `Price` и т.д.), потому что в моделях нет `json`-тегов.
-
-Пример фрагмента:
-
-```json
-{
-  "data": [
-    {
-      "ID": 318,
-      "ExternalID": "citilink_1981056",
-      "Name": "Пример товара",
-      "Price": 1990,
-      "OldPrice": 1990,
-      "Currency": "RUB",
-      "Shop": "citilink",
-      "URL": "https://www.citilink.ru/product/example/",
-      "Category": "",
-      "Brand": "EXAMPLE",
-      "Rating": 0,
-      "ReviewCount": 0,
-      "InStock": true,
-      "CreatedAt": "2026-03-02T18:57:02.504943Z",
-      "UpdatedAt": "2026-03-02T20:01:27.140584Z"
-    }
-  ],
-  "total": 53,
-  "page": 1,
-  "limit": 1
-}
-```
+Если API работает на `8080`, не забудьте указать `VITE_API_BASE_URL=http://localhost:8080` во фронтенде.
