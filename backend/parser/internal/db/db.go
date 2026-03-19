@@ -95,6 +95,21 @@ func (d *DB) Migrate() error {
 			updated_at  TIMESTAMPTZ DEFAULT NOW(),
 			UNIQUE (product_id, spec_name)
 		)`,
+		`CREATE TABLE IF NOT EXISTS product_reviews (
+			id            BIGSERIAL PRIMARY KEY,
+			product_id    BIGINT NOT NULL REFERENCES products(id) ON DELETE CASCADE,
+			external_id   TEXT NOT NULL,
+			author        TEXT,
+			rating        NUMERIC(3,2) DEFAULT 0,
+			title         TEXT,
+			content       TEXT,
+			verified      BOOLEAN DEFAULT FALSE,
+			helpful_count INT DEFAULT 0,
+			source        VARCHAR(50) DEFAULT '',
+			review_date   TEXT,
+			created_at    TIMESTAMPTZ DEFAULT NOW(),
+			UNIQUE (product_id, external_id)
+		)`,
 		`CREATE TABLE IF NOT EXISTS users (
 			id             BIGSERIAL PRIMARY KEY,
 			name           TEXT NOT NULL,
@@ -121,6 +136,7 @@ func (d *DB) Migrate() error {
 		`CREATE INDEX IF NOT EXISTS idx_product_images_product_sort ON product_images(product_id, sort_order)`,
 		`CREATE INDEX IF NOT EXISTS idx_price_history_product ON price_history(product_id, recorded_at DESC)`,
 		`CREATE INDEX IF NOT EXISTS idx_product_specs_product ON product_specs(product_id)`,
+		`CREATE INDEX IF NOT EXISTS idx_product_reviews_product ON product_reviews(product_id)`,
 		`CREATE UNIQUE INDEX IF NOT EXISTS idx_users_email_lower ON users (LOWER(email))`,
 	}
 

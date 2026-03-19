@@ -8,6 +8,7 @@ import PriceHistoryChart from './components/PriceHistoryChart';
 import UserDrawer from './components/UserDrawer';
 import AuthScreen from './components/AuthScreen';
 import { searchProductsWithAI } from './services/geminiService';
+import { fetchProductReviews } from './services/reviewService';
 import { fetchUserById, updateUserLists } from './services/userService';
 import { Search, Bot, BarChart2, ArrowRight, ShieldCheck, Sparkles, ShoppingBag, Heart, Star, CheckCircle, TrendingDown, Truck, ArrowLeft, Filter, ArrowUpRight, Store, Loader2, LogOut, ChevronDown } from 'lucide-react';
 
@@ -203,6 +204,7 @@ function App() {
   const [searchTerm, setSearchTerm] = useState('');
   const [aiRecommendedIds, setAiRecommendedIds] = useState<string[]>([]);
   const [detailTab, setDetailTab] = useState<'overview' | 'reviews'>('overview');
+  const [isReviewsLoading, setIsReviewsLoading] = useState(false);
   const [selectedProductImage, setSelectedProductImage] = useState('');
   const [variantProducts, setVariantProducts] = useState<Product[]>([]);
   const [isVariantsLoading, setIsVariantsLoading] = useState(false);
@@ -233,6 +235,7 @@ function App() {
   const searchInputRef = useRef<HTMLInputElement>(null);
   const userSyncTimerRef = useRef<number | null>(null);
   const lastUserSyncSnapshotRef = useRef<string | null>(null);
+  const reviewsLoadedRef = useRef<Set<string>>(new Set());
 
   const getRouteFromHash = () => {
     const hash = window.location.hash || '';
@@ -807,6 +810,54 @@ function App() {
     }
   };
 
+  useEffect(() => {
+    if (!selectedProduct) return;
+    if (detailTab !== 'reviews') return;
+    if (!selectedProduct.backendId) return;
+    if (reviewsLoadedRef.current.has(selectedProduct.id)) return;
+
+    const currentProductId = selectedProduct.id;
+    const currentReviewCount = selectedProduct.reviewCount || 0;
+
+    reviewsLoadedRef.current.add(currentProductId);
+    let isActive = true;
+    setIsReviewsLoading(true);
+
+    fetchProductReviews(selectedProduct.backendId)
+      .then((reviews) => {
+        if (!isActive) return;
+        const normalized = reviews || [];
+        if (normalized.length === 0) {
+          if (currentReviewCount > 0) {
+            reviewsLoadedRef.current.delete(currentProductId);
+          }
+          return;
+        }
+
+        const updated: Product = {
+          ...selectedProduct,
+          reviews: normalized,
+          reviewCount: Math.max(selectedProduct.reviewCount || 0, normalized.length),
+        };
+
+        setSelectedProduct(updated);
+        setProducts((prev) => prev.map((product) => (product.id === updated.id ? updated : product)));
+        setProductCatalog((prev) => prev.map((product) => (product.id === updated.id ? updated : product)));
+      })
+      .catch((error) => {
+        console.error('Failed to load reviews', error);
+        reviewsLoadedRef.current.delete(currentProductId);
+      })
+      .finally(() => {
+        if (isActive) setIsReviewsLoading(false);
+      });
+
+    return () => {
+      isActive = false;
+      setIsReviewsLoading(false);
+    };
+  }, [selectedProduct?.id, selectedProduct?.backendId, detailTab]);
+
   const handleProductSelect = (product: Product) => {
     mergeProductCatalog([product]);
     if (user) {
@@ -1098,6 +1149,7 @@ function App() {
       case 'Yandex Market': return 'bg-yellow-100 text-yellow-800';
       case 'DNS': return 'bg-orange-100 text-orange-700';
       case 'M.Video': return 'bg-red-100 text-red-700';
+      case 'Citilink': return 'bg-emerald-100 text-emerald-700';
       default: return 'bg-slate-100 text-slate-700';
     }
   };
@@ -1689,6 +1741,15 @@ function App() {
                                {/* PRECISE RATING TO 2 DECIMALS */}
                                <span className="text-sm font-bold text-slate-700">{selectedProduct.rating.toFixed(2)}</span>
                             </div>
+                            {typeof selectedProduct.inStock === 'boolean' && (
+                              <span
+                                className={`text-[10px] font-bold px-2 py-1 rounded uppercase ${
+                                  selectedProduct.inStock ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700'
+                                }`}
+                              >
+                                {selectedProduct.inStock ? 'В наличии' : 'Нет в наличии'}
+                              </span>
+                            )}
                          </div>
                       </div>
                       
@@ -1872,6 +1933,11 @@ function App() {
                       </div>
                    ) : (
                       <div className="space-y-6 pb-4">
+                         {isReviewsLoading && selectedProduct.reviews.length === 0 && (
+                            <div className="text-center py-10 text-slate-400 flex items-center justify-center gap-2">
+                               <Loader2 size={16} className="animate-spin" /> Загружаем отзывы...
+                            </div>
+                         )}
                          {selectedProduct.reviews.map(review => (
                             <div key={review.id} className="border-b border-slate-100 pb-6 last:border-0">
                                <div className="flex items-center justify-between mb-2">
@@ -1892,7 +1958,7 @@ function App() {
                                <p className="text-sm text-slate-600">{review.content}</p>
                             </div>
                          ))}
-                         {selectedProduct.reviews.length === 0 && (
+                         {!isReviewsLoading && selectedProduct.reviews.length === 0 && (
                             <div className="text-center py-10 text-slate-400">
                                Отзывов пока нет.
                             </div>

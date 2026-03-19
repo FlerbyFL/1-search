@@ -1,6 +1,5 @@
 import { GoogleGenAI } from "@google/genai";
 import { Product } from "../types";
-import { generateReviews } from "../constants";
 
 const ai = new GoogleGenAI({ apiKey: process.env.API_KEY || "" });
 const API_BASE = (import.meta.env.VITE_API_BASE_URL || "http://localhost:8081").replace(/\/$/, "");
@@ -248,8 +247,9 @@ const normalizeBackendProduct = (raw: BackendProduct, fallbackName: string) => {
   const price = readNumber(raw.Price ?? raw.price);
   const oldPrice = readNumber(raw.OldPrice ?? raw.old_price);
   const shopName = readString(raw.Shop) || readString(raw.shop_name) || readString(raw.shop);
-  const externalID = readString(raw.ExternalID);
-  const url = fixCitilinkProductUrl(readString(raw.URL) || readString(raw.url), externalID);
+  const backendId = typeof raw.ID === "number" && Number.isFinite(raw.ID) ? raw.ID : undefined;
+  const externalId = readString(raw.ExternalID);
+  const url = fixCitilinkProductUrl(readString(raw.URL) || readString(raw.url), externalId);
   const images = normalizeImageCollection(raw.ImageURLs, raw.image_urls, raw.images, raw.ImageURL, raw.image_url);
   const image = images[0] || "";
   const available = readBoolean(raw.InStock ?? raw.available, true);
@@ -274,6 +274,8 @@ const normalizeBackendProduct = (raw: BackendProduct, fallbackName: string) => {
     category,
     rating,
     reviewCount,
+    backendId,
+    externalId,
     specs,
   };
 };
@@ -507,6 +509,8 @@ const hydrateBackendProducts = (rawResults: BackendProduct[], query: string): Pr
     rating: number;
     logo: string;
     url: string;
+    backendId?: number;
+    externalId?: string;
   };
 
   type BackendGroup = {
@@ -586,6 +590,8 @@ const hydrateBackendProducts = (rawResults: BackendProduct[], query: string): Pr
       rating: normalized.rating || 4.5,
       logo: mapLogo(normalized.shopName),
       url: normalized.url,
+      backendId: normalized.backendId,
+      externalId: normalized.externalId,
     });
   }
 
@@ -600,6 +606,8 @@ const hydrateBackendProducts = (rawResults: BackendProduct[], query: string): Pr
 
     products.push({
       id: group.id,
+      backendId: bestOffer.backendId,
+      externalId: bestOffer.externalId,
       name: group.name,
       category: group.category,
       image: gallery[0],
@@ -608,7 +616,7 @@ const hydrateBackendProducts = (rawResults: BackendProduct[], query: string): Pr
       oldPrice: bestOffer.oldPrice || (group.oldPrice > bestOffer.price ? group.oldPrice : undefined),
       rating: group.rating,
       reviewCount: group.reviewCount,
-      reviews: generateReviews(group.id, 3),
+      reviews: [],
       specs: toUiSpecs(group.specs),
       tags: [group.brand].filter(Boolean),
       description: group.name,
@@ -801,3 +809,4 @@ export const getAIRecommendation = async (
     };
   }
 };
+

@@ -39,6 +39,8 @@ export interface StoreOffer {
 
 export interface Product {
   id: string;
+  backendId?: number;
+  externalId?: string;
   name: string;
   category: Category;
   image: string; // Main image

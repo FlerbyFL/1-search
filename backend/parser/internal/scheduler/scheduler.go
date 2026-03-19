@@ -81,6 +81,11 @@ func (w *Worker) parseTarget(t CategoryTarget) {
 				w.logger.Warn("Save images failed", zap.Error(err))
 			}
 		}
+		if len(result.Reviews) > 0 {
+			if err := w.database.SaveProductReviews(productID, result.Reviews); err != nil {
+				w.logger.Warn("Save reviews failed", zap.Error(err))
+			}
+		}
 		saved++
 	}
 

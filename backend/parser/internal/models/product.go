@@ -50,6 +50,7 @@ type PriceHistory struct {
 type ParseResult struct {
 	Product Product
 	Images  []string // image URLs
+	Reviews []Review
 	Error   error
 }
 

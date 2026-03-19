@@ -210,9 +210,13 @@ export const convertGoProductToUI = (goProduct: GoApiProduct): Product => {
   const normalized = normalizeGoProduct(goProduct);
   const safeName = normalized.name || "Неизвестный товар";
   const idSource = readString(goProduct.ExternalID) || `${normalized.shop}-${safeName}-${normalized.price}`;
+  const backendId = typeof goProduct.ID === "number" && Number.isFinite(goProduct.ID) ? goProduct.ID : undefined;
+  const externalId = readString(goProduct.ExternalID);
 
   return {
     id: idSource.replace(/\s+/g, "-").toLowerCase(),
+    backendId,
+    externalId,
     name: safeName,
     category: inferProductCategory(safeName),
     image: normalized.image || LOCAL_FALLBACK_IMAGE,
@@ -221,6 +225,7 @@ export const convertGoProductToUI = (goProduct: GoApiProduct): Product => {
     rating: normalized.rating || 4.5,
     reviewCount: normalized.reviewCount || 0,
     reviews: [],
+    inStock: normalized.available,
     specs: {},
     priceHistory: [],
     tags: [],
@@ -340,3 +345,7 @@ export default {
   triggerFullParse,
   checkApiHealth,
 };
+
+
+
+

@@ -20,6 +20,12 @@ const ProductCard: React.FC<ProductCardProps> = ({ product, onCompare, isCompare
   const bestOffer = product.offers[0];
   const specs = Object.values(product.specs || {});
   const displayedSpecs = specs.slice(0, 6);
+  const stockStatus =
+    product.inStock === false
+      ? { label: 'Нет в наличии', className: 'bg-rose-50 text-rose-700' }
+      : product.inStock === true
+        ? { label: 'В наличии', className: 'bg-emerald-50 text-emerald-700' }
+        : null;
 
   const formatPrice = (price: number) => {
     return price.toLocaleString('ru-RU');
@@ -129,6 +135,11 @@ const ProductCard: React.FC<ProductCardProps> = ({ product, onCompare, isCompare
               <div className="flex items-center gap-1.5 text-[10px] text-green-600 font-medium bg-green-50 px-2 py-0.5 rounded-full w-fit mb-1">
                  <Truck size={10} /> {bestOffer?.delivery || 'Быстрая доставка'}
               </div>
+              {stockStatus && (
+                <div className={`text-[10px] font-semibold px-2 py-0.5 rounded-full w-fit mb-1 ${stockStatus.className}`}>
+                  {stockStatus.label}
+                </div>
+              )}
               <div className="text-lg font-bold text-slate-900">{formatPrice(product.price)} ₽</div>
            </div>
            
@@ -145,3 +156,8 @@ const ProductCard: React.FC<ProductCardProps> = ({ product, onCompare, isCompare
 };
 
 export default ProductCard;
+
+
+
+
+

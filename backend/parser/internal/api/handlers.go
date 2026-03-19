@@ -39,6 +39,7 @@ func (h *Handler) SetupRoutes(r *gin.Engine) {
 	api := r.Group("/api/v1")
 	{
 		api.GET("/products", h.GetProducts)
+		api.GET("/products/:id/reviews", h.GetProductReviews)
 		api.GET("/products/search", h.SearchProducts)
 		api.GET("/categories", h.GetCategories)
 		api.GET("/images/proxy", h.ProxyImage)
@@ -449,6 +450,72 @@ func (h *Handler) SearchProducts(c *gin.Context) {
 	})
 }
 
+type reviewResponse struct {
+	ID           string  `json:"id"`
+	Author       string  `json:"author"`
+	Rating       float64 `json:"rating"`
+	Date         string  `json:"date"`
+	Title        string  `json:"title"`
+	Content      string  `json:"content"`
+	Verified     bool    `json:"verified"`
+	HelpfulCount int     `json:"helpfulCount"`
+	Source       string  `json:"source"`
+}
+
+// GET /api/v1/products/:id/reviews?limit=200&offset=0
+func (h *Handler) GetProductReviews(c *gin.Context) {
+	rawID := strings.TrimSpace(c.Param("id"))
+	if rawID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "product id is required"})
+		return
+	}
+	productID, err := strconv.ParseInt(rawID, 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid product id"})
+		return
+	}
+
+	limit := 200
+	if v := c.Query("limit"); v != "" {
+		if i, err := strconv.Atoi(v); err == nil && i > 0 && i <= 1000 {
+			limit = i
+		}
+	}
+	offset := 0
+	if v := c.Query("offset"); v != "" {
+		if i, err := strconv.Atoi(v); err == nil && i >= 0 {
+			offset = i
+		}
+	}
+
+	reviews, err := h.db.GetProductReviews(productID, limit, offset)
+	if err != nil {
+		h.logger.Error("GetProductReviews failed", zap.Error(err))
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal error"})
+		return
+	}
+
+	result := make([]reviewResponse, 0, len(reviews))
+	for _, review := range reviews {
+		result = append(result, reviewResponse{
+			ID:           fmt.Sprintf("r-%d", review.ID),
+			Author:       review.Author,
+			Rating:       review.Rating,
+			Date:         review.Date,
+			Title:        review.Title,
+			Content:      review.Content,
+			Verified:     review.Verified,
+			HelpfulCount: review.HelpfulCount,
+			Source:       normalizeReviewSource(review.Source),
+		})
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"data":  result,
+		"total": len(result),
+	})
+}
+
 // GET /api/v1/categories
 func (h *Handler) GetCategories(c *gin.Context) {
 	categories, err := h.db.GetCategories()
@@ -535,6 +602,30 @@ func normalizeImageURL(raw string) (string, error) {
 	}
 
 	return u.String(), nil
+}
+
+func normalizeReviewSource(raw string) string {
+	value := strings.TrimSpace(raw)
+	if value == "" {
+		return "Citilink"
+	}
+	lower := strings.ToLower(value)
+	switch {
+	case strings.Contains(lower, "ozon"):
+		return "Ozon"
+	case strings.Contains(lower, "wildberries"):
+		return "Wildberries"
+	case strings.Contains(lower, "yandex"):
+		return "Yandex Market"
+	case strings.Contains(lower, "dns"):
+		return "DNS"
+	case strings.Contains(lower, "m.video") || strings.Contains(lower, "mvideo"):
+		return "M.Video"
+	case strings.Contains(lower, "citilink"):
+		return "Citilink"
+	default:
+		return value
+	}
 }
 
 func requestScheme(c *gin.Context) string {
