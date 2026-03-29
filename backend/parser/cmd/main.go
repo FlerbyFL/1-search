@@ -42,6 +42,12 @@ func main() {
 		os.Exit(1)
 	}
 
+	// Check pitergsm.py exists alongside browser.py
+	piterGSMPath := filepath.Join(filepath.Dir(*scriptPath), "pitergsm.py")
+	if _, err := os.Stat(piterGSMPath); err != nil {
+		fmt.Fprintf(os.Stderr, "WARNING: pitergsm.py not found at %s — PiterGSM targets will be skipped\n", piterGSMPath)
+	}
+
 	logger := newLogger(*debug)
 	defer logger.Sync()
 

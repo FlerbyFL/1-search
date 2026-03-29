@@ -83,7 +83,33 @@ const readBoolean = (value: unknown, fallback = true): boolean => {
   return fallback;
 };
 
-const normalizeImageUrl = (value: string): string => {
+const normalizeShopName = (value: string): string => {
+  const trimmed = readString(value);
+  if (!trimmed) return "";
+  const lower = trimmed.toLowerCase();
+  if (lower.includes("pitergsm") || lower.includes("piter gsm")) return "PiterGSM";
+  if (lower.includes("citilink") || lower.includes("citylink") || lower.includes("ситилинк")) return "Citilink";
+  if (lower.includes("m.video") || lower.includes("mvideo")) return "M.Video";
+  if (lower.includes("yandex")) return "Yandex Market";
+  if (lower.includes("wildberries")) return "Wildberries";
+  if (lower.includes("ozon")) return "Ozon";
+  if (lower.includes("dns")) return "DNS";
+  return trimmed;
+};
+
+const mapLogo = (shop: string): string => {
+  const value = shop.toLowerCase();
+  if (value.includes("pitergsm")) return "pitergsm";
+  if (value.includes("citilink") || value.includes("citylink")) return "citilink";
+  if (value.includes("ozon")) return "ozon";
+  if (value.includes("wildberries")) return "wb";
+  if (value.includes("dns")) return "dns";
+  if (value.includes("yandex")) return "yandex";
+  if (value.includes("m.video") || value.includes("mvideo")) return "mvideo";
+  return "shop";
+};
+
+const normalizeImageUrl = (value: string, shop?: string): string => {
   let normalized = readString(value);
   if (!normalized) return "";
 
@@ -91,7 +117,12 @@ const normalizeImageUrl = (value: string): string => {
     normalized = `https:${normalized}`;
   }
   if (normalized.startsWith("/")) {
-    normalized = `https://www.citilink.ru${normalized}`;
+    const shopLower = readString(shop).toLowerCase();
+    if (shopLower.includes("pitergsm")) {
+      normalized = `https://pitergsm.ru${normalized}`;
+    } else if (shopLower.includes("citilink") || shopLower.includes("citylink") || shopLower.includes("ситилинк")) {
+      normalized = `https://www.citilink.ru${normalized}`;
+    }
   }
 
   if (!/^https?:\/\//i.test(normalized)) {
@@ -109,12 +140,12 @@ const normalizeImageUrl = (value: string): string => {
   }
 };
 
-const normalizeImageCollection = (...values: unknown[]): string[] => {
+const normalizeImageCollection = (shop: string, ...values: unknown[]): string[] => {
   const result: string[] = [];
   const seen = new Set<string>();
 
   const pushValue = (candidate: unknown) => {
-    const normalized = normalizeImageUrl(readString(candidate));
+    const normalized = normalizeImageUrl(readString(candidate), shop);
     if (!normalized || seen.has(normalized)) return;
     seen.add(normalized);
     result.push(normalized);
@@ -186,12 +217,13 @@ const inferProductCategory = (
 const normalizeGoProduct = (raw: GoApiProduct) => {
   const name = readString(raw.Name) || readString(raw.name);
   const price = readNumber(raw.Price ?? raw.price);
-  const shop = readString(raw.Shop) || readString(raw.shop_name) || readString(raw.shop);
+  const shopRaw = readString(raw.Shop) || readString(raw.shop_name) || readString(raw.shop);
+  const shop = normalizeShopName(shopRaw);
   const url = fixCitilinkProductUrl(
     readString(raw.URL) || readString(raw.url),
     readString(raw.ExternalID)
   );
-  const images = normalizeImageCollection(raw.ImageURLs, raw.image_urls, raw.images, raw.ImageURL, raw.image_url);
+  const images = normalizeImageCollection(shopRaw || shop, raw.ImageURLs, raw.image_urls, raw.images, raw.ImageURL, raw.image_url);
   const image = images[0] || "";
   const rating = readNumber(raw.Rating ?? raw.rating);
   const reviewCount = typeof raw.ReviewCount === "number" ? raw.ReviewCount : raw.review_count ?? 0;
@@ -237,7 +269,7 @@ export const convertGoProductToUI = (goProduct: GoApiProduct): Product => {
         price: Math.round(normalized.price || 0),
         delivery: "Сегодня",
         rating: normalized.rating || 4.5,
-        logo: "shop",
+        logo: mapLogo(normalized.shop || ""),
         url: normalized.url || "#",
       },
     ],
@@ -301,7 +333,8 @@ export async function getStatistics(): Promise<GoStatsResponse | null> {
 
     const shopStatistics: Record<string, number> = {};
     products.forEach((product) => {
-      const shop = readString(product.Shop) || readString(product.shop_name) || readString(product.shop) || "unknown";
+      const shopRaw = readString(product.Shop) || readString(product.shop_name) || readString(product.shop);
+      const shop = normalizeShopName(shopRaw) || "unknown";
       shopStatistics[shop] = (shopStatistics[shop] || 0) + 1;
     });
 

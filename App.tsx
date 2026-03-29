@@ -1150,6 +1150,7 @@ function App() {
       case 'DNS': return 'bg-orange-100 text-orange-700';
       case 'M.Video': return 'bg-red-100 text-red-700';
       case 'Citilink': return 'bg-emerald-100 text-emerald-700';
+      case 'PiterGSM': return 'bg-sky-100 text-sky-700';
       default: return 'bg-slate-100 text-slate-700';
     }
   };

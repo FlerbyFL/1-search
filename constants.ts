@@ -17,7 +17,7 @@ export const SCENARIOS: Scenario[] = [
   { id: 'gaming', label: 'Гейминг', icon: '🎮', description: 'Максимальная мощность видеокарты', promptModifier: '' },
 ];
 
-export const reviewSources = ['Ozon', 'Wildberries', 'Yandex Market', 'DNS', 'M.Video', 'Citilink'] as const;
+export const reviewSources = ['Ozon', 'Wildberries', 'Yandex Market', 'DNS', 'M.Video', 'Citilink', 'PiterGSM'] as const;
 
 export const generateReviews = (productId: string, count: number): Review[] => {
   const reviews: Review[] = [];
@@ -66,6 +66,7 @@ const generateOffers = (basePrice: number, productName: string): StoreOffer[] =>
     { name: 'DNS', variance: 0.02, delivery: 'Сегодня', logo: 'dns', url: `https://www.dns-shop.ru/search/?q=${encodedName}` },
     { name: 'Yandex Market', variance: -0.02, delivery: 'Сегодня', logo: 'yandex', url: `https://market.yandex.ru/search?text=${encodedName}` },
     { name: 'Citilink', variance: 0.01, delivery: 'Завтра', logo: 'citilink', url: `https://www.citilink.ru/search/?text=${encodedName}` },
+    { name: 'PiterGSM', variance: 0.015, delivery: 'Завтра', logo: 'pitergsm', url: 'https://pitergsm.ru' },
     { name: 'M.Video', variance: 0.03, delivery: 'Сегодня', logo: 'mvideo', url: `https://www.mvideo.ru/product-list-page?q=${encodedName}` },
   ];
 

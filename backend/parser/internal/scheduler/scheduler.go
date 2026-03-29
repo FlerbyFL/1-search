@@ -1,6 +1,7 @@
 package scheduler
 
 import (
+	"path/filepath"
 	"sync"
 	"time"
 
@@ -107,11 +108,16 @@ func (w *Worker) RunScheduled(targets []CategoryTarget, interval time.Duration) 
 	}
 }
 
-// DefaultTargets — Ситилинк, все категории
+// DefaultTargets — Ситилинк + PiterGSM
 func DefaultTargets(logger *zap.Logger, scriptPath string) []CategoryTarget {
 	cl := parsers.NewBrowserParser("citilink", scriptPath, logger)
 
+	// Resolve pitergsm.py path relative to browser.py location
+	piterGSMScript := resolveSiblingScript(scriptPath, "pitergsm.py")
+	pg := parsers.NewBrowserParser("pitergsm", piterGSMScript, logger)
+
 	return []CategoryTarget{
+		// --- Citilink ---
 		{Parser: cl, CategoryURL: "https://www.citilink.ru/catalog/smartfony/"},
 		{Parser: cl, CategoryURL: "https://www.citilink.ru/catalog/noutbuki/"},
 		{Parser: cl, CategoryURL: "https://www.citilink.ru/catalog/televizory/"},
@@ -119,7 +125,26 @@ func DefaultTargets(logger *zap.Logger, scriptPath string) []CategoryTarget {
 		{Parser: cl, CategoryURL: "https://www.citilink.ru/catalog/processory/"},
 		{Parser: cl, CategoryURL: "https://www.citilink.ru/catalog/videokarty/"},
 		{Parser: cl, CategoryURL: "https://www.citilink.ru/catalog/naushniki/"},
+
+		// --- PiterGSM ---
+		{Parser: pg, CategoryURL: "https://pitergsm.ru/catalog/phones/iphone/"},
+		{Parser: pg, CategoryURL: "https://pitergsm.ru/catalog/phones/smartfony/"},
+		{Parser: pg, CategoryURL: "https://pitergsm.ru/catalog/tablets/ipad/"},
+		{Parser: pg, CategoryURL: "https://pitergsm.ru/catalog/tablets/"},
+		{Parser: pg, CategoryURL: "https://pitergsm.ru/catalog/mac/"},
+		{Parser: pg, CategoryURL: "https://pitergsm.ru/catalog/elektronika/smartwatch/"},
+		{Parser: pg, CategoryURL: "https://pitergsm.ru/catalog/elektronika/naushniki/"},
+		{Parser: pg, CategoryURL: "https://pitergsm.ru/catalog/elektronika/noutbuki/"},
+		{Parser: pg, CategoryURL: "https://pitergsm.ru/catalog/elektronika/televizory/"},
+		{Parser: pg, CategoryURL: "https://pitergsm.ru/catalog/elektronika/igrovye-pristavki/"},
+		{Parser: pg, CategoryURL: "https://pitergsm.ru/catalog/elektronika/gadzhety/"},
+		{Parser: pg, CategoryURL: "https://pitergsm.ru/catalog/accessories/"},
 	}
+}
+
+// resolveSiblingScript returns a path to scriptName in the same directory as basePath.
+func resolveSiblingScript(basePath, scriptName string) string {
+	return filepath.Join(filepath.Dir(basePath), scriptName)
 }
 
 func FindBestPrices(database *db.DB, productName string) ([]models.Product, error) {

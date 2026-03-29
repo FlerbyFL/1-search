@@ -23,7 +23,7 @@ export interface Review {
   content: string;
   verified: boolean;
   helpfulCount: number;
-  source: 'Ozon' | 'Wildberries' | 'Yandex Market' | 'DNS' | 'M.Video' | 'Citilink';
+  source: 'Ozon' | 'Wildberries' | 'Yandex Market' | 'DNS' | 'M.Video' | 'Citilink' | 'PiterGSM';
 }
 
 export interface StoreOffer {

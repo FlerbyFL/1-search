@@ -46,7 +46,8 @@ const normalizeSource = (value: string): Review["source"] => {
   if (lower.includes("yandex")) return "Yandex Market";
   if (lower.includes("dns")) return "DNS";
   if (lower.includes("m.video") || lower.includes("mvideo")) return "M.Video";
-  if (lower.includes("citilink")) return "Citilink";
+  if (lower.includes("citilink") || lower.includes("citylink")) return "Citilink";
+  if (lower.includes("pitergsm") || lower.includes("piter gsm")) return "PiterGSM";
   return "Citilink";
 };
 

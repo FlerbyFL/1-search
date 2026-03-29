@@ -81,6 +81,20 @@ const readBoolean = (value: unknown, fallback = true): boolean => {
   return fallback;
 };
 
+const normalizeShopName = (value: string): string => {
+  const trimmed = readString(value);
+  if (!trimmed) return "";
+  const lower = trimmed.toLowerCase();
+  if (lower.includes("pitergsm") || lower.includes("piter gsm")) return "PiterGSM";
+  if (lower.includes("citilink") || lower.includes("citylink") || lower.includes("ситилинк")) return "Citilink";
+  if (lower.includes("m.video") || lower.includes("mvideo")) return "M.Video";
+  if (lower.includes("yandex")) return "Yandex Market";
+  if (lower.includes("wildberries")) return "Wildberries";
+  if (lower.includes("ozon")) return "Ozon";
+  if (lower.includes("dns")) return "DNS";
+  return trimmed;
+};
+
 const normalizeSpecs = (
   raw: BackendProduct["Specs"] | BackendProduct["specs"]
 ): Record<string, string> => {
@@ -159,7 +173,7 @@ const extractSpecsFromName = (name: string): Record<string, string> => {
   return specs;
 };
 
-const normalizeImageUrl = (value: string): string => {
+const normalizeImageUrl = (value: string, shop?: string): string => {
   let normalized = readString(value);
   if (!normalized) return "";
 
@@ -167,7 +181,12 @@ const normalizeImageUrl = (value: string): string => {
     normalized = `https:${normalized}`;
   }
   if (normalized.startsWith("/")) {
-    normalized = `https://www.citilink.ru${normalized}`;
+    const shopLower = readString(shop).toLowerCase();
+    if (shopLower.includes("pitergsm")) {
+      normalized = `https://pitergsm.ru${normalized}`;
+    } else if (shopLower.includes("citilink") || shopLower.includes("citylink") || shopLower.includes("ситилинк")) {
+      normalized = `https://www.citilink.ru${normalized}`;
+    }
   }
 
   if (!/^https?:\/\//i.test(normalized)) {
@@ -185,12 +204,12 @@ const normalizeImageUrl = (value: string): string => {
   }
 };
 
-const normalizeImageCollection = (...values: unknown[]): string[] => {
+const normalizeImageCollection = (shop: string, ...values: unknown[]): string[] => {
   const result: string[] = [];
   const seen = new Set<string>();
 
   const pushValue = (candidate: unknown) => {
-    const normalized = normalizeImageUrl(readString(candidate));
+    const normalized = normalizeImageUrl(readString(candidate), shop);
     if (!normalized || seen.has(normalized)) return;
     seen.add(normalized);
     result.push(normalized);
@@ -246,11 +265,12 @@ const normalizeBackendProduct = (raw: BackendProduct, fallbackName: string) => {
   const name = readString(raw.Name) || readString(raw.name) || fallbackName;
   const price = readNumber(raw.Price ?? raw.price);
   const oldPrice = readNumber(raw.OldPrice ?? raw.old_price);
-  const shopName = readString(raw.Shop) || readString(raw.shop_name) || readString(raw.shop);
+  const shopRaw = readString(raw.Shop) || readString(raw.shop_name) || readString(raw.shop);
+  const shopName = normalizeShopName(shopRaw);
   const backendId = typeof raw.ID === "number" && Number.isFinite(raw.ID) ? raw.ID : undefined;
   const externalId = readString(raw.ExternalID);
   const url = fixCitilinkProductUrl(readString(raw.URL) || readString(raw.url), externalId);
-  const images = normalizeImageCollection(raw.ImageURLs, raw.image_urls, raw.images, raw.ImageURL, raw.image_url);
+  const images = normalizeImageCollection(shopRaw || shopName, raw.ImageURLs, raw.image_urls, raw.images, raw.ImageURL, raw.image_url);
   const image = images[0] || "";
   const available = readBoolean(raw.InStock ?? raw.available, true);
   const brand = readString(raw.Brand) || readString(raw.brand);
@@ -460,12 +480,13 @@ const detectCategoryIntent = (query: string): CategoryIntent | null => {
 
 const mapLogo = (shop: string): string => {
   const value = shop.toLowerCase();
+  if (value.includes("pitergsm")) return "pitergsm";
   if (value.includes("ozon")) return "ozon";
   if (value.includes("wildberries")) return "wb";
   if (value.includes("dns")) return "dns";
   if (value.includes("yandex")) return "yandex";
   if (value.includes("m.video") || value.includes("mvideo")) return "mvideo";
-  if (value.includes("citilink")) return "citilink";
+  if (value.includes("citilink") || value.includes("citylink")) return "citilink";
   return "shop";
 };
 
