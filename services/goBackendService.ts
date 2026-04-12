@@ -1,6 +1,6 @@
 import { Product } from "../types";
 
-const API_BASE = (import.meta.env.VITE_API_BASE_URL || "http://localhost:8081").replace(/\/$/, "");
+const API_BASE = ((import.meta as any).env?.VITE_API_BASE_URL || "http://localhost:8081").replace(/\/$/, "");
 const LOCAL_FALLBACK_IMAGE = `data:image/svg+xml;utf8,${encodeURIComponent(
   '<svg xmlns="http://www.w3.org/2000/svg" width="800" height="600"><rect width="100%" height="100%" fill="#F1F5F9"/><text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle" fill="#64748B" font-family="Arial" font-size="40">Нет фото</text></svg>'
 )}`;
@@ -93,7 +93,6 @@ const normalizeShopName = (value: string): string => {
   if (lower.includes("yandex")) return "Yandex Market";
   if (lower.includes("wildberries")) return "Wildberries";
   if (lower.includes("ozon")) return "Ozon";
-  if (lower.includes("dns")) return "DNS";
   return trimmed;
 };
 
@@ -103,7 +102,6 @@ const mapLogo = (shop: string): string => {
   if (value.includes("citilink") || value.includes("citylink")) return "citilink";
   if (value.includes("ozon")) return "ozon";
   if (value.includes("wildberries")) return "wb";
-  if (value.includes("dns")) return "dns";
   if (value.includes("yandex")) return "yandex";
   if (value.includes("m.video") || value.includes("mvideo")) return "mvideo";
   return "shop";
@@ -204,12 +202,13 @@ const inferProductCategory = (
 
   if (/headphone|earphone|earbud|airpods/i.test(text)) return "headphones";
   if (/телевизор|tv|qled|android tv|smart tv/i.test(text)) return "tv";
+  // Планшеты проверяем раньше смартфонов, чтобы Galaxy Tab не попадали в смартфоны
+  if (/tablet|ipad|galaxy tab|xiaomi pad|планшет/i.test(text)) return "tablet";
   if (/смартфон|телефон|iphone|smartphone|mobile phone/i.test(text)) return "smartphone";
   if (/laptop|macbook|rog|legion|ideapad|vivobook|zenbook|aspire|pavilion/i.test(text)) return "laptop";
   if (/rtx|gtx|radeon|gpu|videocard/i.test(text)) return "gpu";
   if (/watch|smartwatch|apple watch|galaxy watch/i.test(text)) return "smartwatch";
   if (/camera|canon|nikon|fujifilm|sony a7|photo/i.test(text)) return "camera";
-  if (/tablet|ipad|galaxy tab|xiaomi pad/i.test(text)) return "tablet";
 
   return "smartphone";
 };
@@ -227,7 +226,7 @@ const normalizeGoProduct = (raw: GoApiProduct) => {
   const image = images[0] || "";
   const rating = readNumber(raw.Rating ?? raw.rating);
   const reviewCount = typeof raw.ReviewCount === "number" ? raw.ReviewCount : raw.review_count ?? 0;
-  const available = readBoolean(raw.InStock ?? raw.available, true);
+  const available = readBoolean(raw.InStock ?? raw.available, false);
 
   return { name, price, shop, url, image, images, rating, reviewCount, available };
 };

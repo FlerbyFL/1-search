@@ -14,7 +14,8 @@ services:
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres"]
       interval: 5s
-      retries: 5
+      timeout: 5s
+      retries: 10
 
   api:
     build:
@@ -27,6 +28,7 @@ services:
     environment:
       DB_HOST: db
       DB_PORT: 5432
+      DB_USER: postgres
       DB_PASSWORD: ZXCFlerbyFL
       DB_NAME: priceparser
     ports:
@@ -44,8 +46,11 @@ services:
     environment:
       DB_HOST: db
       DB_PORT: 5432
+      DB_USER: postgres
       DB_PASSWORD: ZXCFlerbyFL
       DB_NAME: priceparser
+      SCRIPT_PATH: /app/browser.py
+      ONCE: "false"
     restart: always
 
 volumes:

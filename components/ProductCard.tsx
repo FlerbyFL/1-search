@@ -121,12 +121,15 @@ const ProductCard: React.FC<ProductCardProps> = ({ product, onCompare, isCompare
 
         {displayedSpecs.length > 0 && (
           <div className="mb-4 rounded-lg border border-slate-100 bg-slate-50/80 p-2.5 space-y-1.5 max-h-[140px] overflow-hidden">
-            {displayedSpecs.map((spec, idx) => (
-              <div key={`${spec.label}-${idx}`} className="flex items-start justify-between gap-2 text-[11px] leading-tight">
-                <span className="text-slate-500">{spec.label}</span>
-                <span className="text-slate-700 font-medium text-right">{String(spec.value)} {spec.unit || ''}</span>
-              </div>
-            ))}
+            {displayedSpecs.map((spec, idx) => {
+              const typedSpec = spec as import('../types').Spec;
+              return (
+                <div key={`${typedSpec.label}-${idx}`} className="flex items-start justify-between gap-2 text-[11px] leading-tight">
+                  <span className="text-slate-500">{typedSpec.label}</span>
+                  <span className="text-slate-700 font-medium text-right">{String(typedSpec.value)} {typedSpec.unit || ''}</span>
+                </div>
+              );
+            })}
           </div>
         )}
 

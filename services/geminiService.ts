@@ -2,7 +2,7 @@ import { GoogleGenAI } from "@google/genai";
 import { Product } from "../types";
 
 const ai = new GoogleGenAI({ apiKey: process.env.API_KEY || "" });
-const API_BASE = (import.meta.env.VITE_API_BASE_URL || "http://localhost:8081").replace(/\/$/, "");
+const API_BASE = ((import.meta as any).env?.VITE_API_BASE_URL || "http://localhost:8081").replace(/\/$/, "");
 const LOCAL_FALLBACK_IMAGE = `data:image/svg+xml;utf8,${encodeURIComponent(
   '<svg xmlns="http://www.w3.org/2000/svg" width="800" height="600"><rect width="100%" height="100%" fill="#F1F5F9"/><text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle" fill="#64748B" font-family="Arial" font-size="40">Нет фото</text></svg>'
 )}`;
@@ -272,7 +272,7 @@ const normalizeBackendProduct = (raw: BackendProduct, fallbackName: string) => {
   const url = fixCitilinkProductUrl(readString(raw.URL) || readString(raw.url), externalId);
   const images = normalizeImageCollection(shopRaw || shopName, raw.ImageURLs, raw.image_urls, raw.images, raw.ImageURL, raw.image_url);
   const image = images[0] || "";
-  const available = readBoolean(raw.InStock ?? raw.available, true);
+  const available = readBoolean(raw.InStock ?? raw.available, false);
   const brand = readString(raw.Brand) || readString(raw.brand);
   const category = readString(raw.Category) || readString(raw.category);
   const rating = readNumber(raw.Rating ?? raw.rating);

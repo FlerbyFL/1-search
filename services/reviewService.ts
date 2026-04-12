@@ -1,6 +1,6 @@
 import { Review } from "../types";
 
-const API_BASE = (import.meta.env.VITE_API_BASE_URL || "http://localhost:8081").replace(/\/$/, "");
+const API_BASE = ((import.meta as any).env?.VITE_API_BASE_URL || "http://localhost:8081").replace(/\/$/, "");
 
 type RawReview = {
   ID?: string | number;

@@ -1,5 +1,4 @@
 ﻿import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { MOCK_PRODUCTS } from './constants';
 import { Product, User, Spec, Review, Category } from './types';
 import ProductCard from './components/ProductCard';
 import AIAssistant from './components/AIAssistant';
@@ -189,9 +188,9 @@ function App() {
   const [userSyncReady, setUserSyncReady] = useState(false);
 
   // Data State
-  const [products, setProducts] = useState<Product[]>(MOCK_PRODUCTS);
-  const [productCatalog, setProductCatalog] = useState<Product[]>(MOCK_PRODUCTS);
-  const [filteredProducts, setFilteredProducts] = useState<Product[]>(MOCK_PRODUCTS);
+  const [products, setProducts] = useState<Product[]>([]);
+  const [productCatalog, setProductCatalog] = useState<Product[]>([]);
+  const [filteredProducts, setFilteredProducts] = useState<Product[]>([]);
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
   const [isSearching, setIsSearching] = useState(false);
   const [searchStatus, setSearchStatus] = useState('');
@@ -225,7 +224,7 @@ function App() {
   const [selectedBrands, setSelectedBrands] = useState<string[]>([]);
   const [minRatingInput, setMinRatingInput] = useState('0');
   const [specSearchTerm, setSpecSearchTerm] = useState('');
-  const [onlyInStock, setOnlyInStock] = useState(false);
+  const [onlyInStock, setOnlyInStock] = useState(true);
   const [onlyWithDiscount, setOnlyWithDiscount] = useState(false);
   const [minReviewsInput, setMinReviewsInput] = useState('0');
   const [onlyWithReviews, setOnlyWithReviews] = useState(false);
@@ -294,7 +293,7 @@ function App() {
     const stats = new Map<string, number>();
     products.forEach((product) => {
       const uniqueShops = new Set(product.offers.map((offer) => offer.name).filter(Boolean));
-      uniqueShops.forEach((shop) => {
+      uniqueShops.forEach((shop: string) => {
         stats.set(shop, (stats.get(shop) || 0) + 1);
       });
     });
@@ -590,8 +589,7 @@ function App() {
       sortBy !== 'none';
 
     if (!searchTerm && !isSearching && !hasAnyFilters) {
-      if (viewMode === 'home') setFilteredProducts(MOCK_PRODUCTS);
-      else setFilteredProducts(products);
+      setFilteredProducts(products);
       return;
     }
 
@@ -1124,12 +1122,8 @@ function App() {
     if (results.length > 0) {
         setProducts(results);
         mergeProductCatalog(results);
-    } else {
-        const fallback = MOCK_PRODUCTS.filter(p => p.name.toLowerCase().includes(searchTerm.toLowerCase()));
-        setProducts(fallback);
-        mergeProductCatalog(fallback);
     }
-    
+
     setIsSearching(false);
     setSearchStatus('');
   };
@@ -1147,7 +1141,6 @@ function App() {
       case 'Ozon': return 'bg-blue-100 text-blue-700';
       case 'Wildberries': return 'bg-purple-100 text-purple-700';
       case 'Yandex Market': return 'bg-yellow-100 text-yellow-800';
-      case 'DNS': return 'bg-orange-100 text-orange-700';
       case 'M.Video': return 'bg-red-100 text-red-700';
       case 'Citilink': return 'bg-emerald-100 text-emerald-700';
       case 'PiterGSM': return 'bg-sky-100 text-sky-700';
@@ -1168,7 +1161,7 @@ function App() {
           setLastListViewMode('home');
           setSelectedProduct(null);
           setSearchTerm('');
-          setProducts(MOCK_PRODUCTS);
+          setProducts([]);
           resetFilters();
           setProductHash(null, true);
           setAccountHash(false, true);
@@ -1186,7 +1179,7 @@ function App() {
       {/* Navbar */}
       <header className={`fixed top-0 inset-x-0 h-16 z-40 transition-all duration-500 ${viewMode === 'results' || viewMode === 'product' ? 'bg-white/90 backdrop-blur-xl border-b border-slate-200' : 'bg-transparent'}`}>
         <div className="max-w-7xl mx-auto px-4 h-full flex items-center justify-between">
-          <div className="flex items-center gap-2 cursor-pointer" onClick={() => { setProductHash(null, true); setViewMode('home'); setSearchTerm(''); setProducts(MOCK_PRODUCTS); resetFilters(); }}>
+          <div className="flex items-center gap-2 cursor-pointer" onClick={() => { setProductHash(null, true); setViewMode('home'); setSearchTerm(''); setProducts([]); resetFilters(); }}>
             <div className="w-8 h-8 bg-slate-900 rounded-lg flex items-center justify-center text-lime-400 font-bold shadow-lg shadow-slate-900/20">
               1S
             </div>
