@@ -21,6 +21,7 @@ const CATEGORY_LABELS: Record<Category, string> = {
   camera: 'Камеры',
   gpu: 'Видеокарты',
   cpu: 'Процессоры',
+  accessories: 'Аксессуары',
 };
 
 const IMAGE_FALLBACK = `data:image/svg+xml;utf8,${encodeURIComponent(
@@ -280,6 +281,7 @@ function App() {
       camera: 0,
       gpu: 0,
       cpu: 0,
+      accessories: 0,
     };
 
     products.forEach((product) => {

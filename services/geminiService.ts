@@ -307,9 +307,12 @@ const normalizeNameForGroup = (name: string): string =>
     .replace(/\s+/g, " ")
     .trim();
 
+const ACCESSORY_PATTERNS = /чехол|накладка|case\b|cover\b|стекло|защитное стекло|screen protector|зарядк[аы]|charger|кабель|cable|usb[- ]?c|lightning|magSafe|держатель|holder|подставк|ремешок|strap|band|сумк|кошелек|wallet|powerbank|power bank|адаптер|adapter|переходник|hub|концентратор|бампер|пленк|stylus|стилус|очистител|cleaning|набор\s*аксессуар/i;
+
 const inferCategory = (name: string): Product["category"] => {
   const text = name.toLowerCase();
 
+  if (ACCESSORY_PATTERNS.test(text)) return "accessories";
   if (/наушник|headphone|earbud|airpods|sony wh|buds/i.test(text)) return "headphones";
   if (/телевизор|tv|qled|android tv|smart tv/i.test(text)) return "tv";
   if (/смартфон|телефон|iphone|smartphone|mobile phone/i.test(text)) return "smartphone";
@@ -324,12 +327,21 @@ const inferCategory = (name: string): Product["category"] => {
 };
 
 const normalizeBackendCategory = (rawCategory: string, name: string): Product["category"] => {
-  const value = rawCategory.trim().toLowerCase();
   const nameValue = name.toLowerCase();
-  const looksLikePhone = /\u0441\u043c\u0430\u0440\u0442\u0444\u043e\u043d|\u0442\u0435\u043b\u0435\u0444\u043e\u043d|iphone|smartphone|mobile phone/i.test(nameValue);
-  if (value === "tv" && looksLikePhone) {
-    return "smartphone";
-  }
+
+  // Имя товара имеет ПРИОРИТЕТ над категорией бэкенда
+  if (ACCESSORY_PATTERNS.test(nameValue)) return "accessories";
+  if (/наушник|headphone|earbud|airpods|sony wh|buds/i.test(nameValue)) return "headphones";
+  if (/телевизор|tv|qled|android tv|smart tv/i.test(nameValue)) return "tv";
+  if (/смартфон|телефон|iphone|smartphone|mobile phone/i.test(nameValue)) return "smartphone";
+  if (/ноутбук|laptop|macbook|rog|legion|ideapad|vivobook|zenbook|aspire|pavilion|notebook/i.test(nameValue)) return "laptop";
+  if (/видеокарт|rtx|gtx|radeon|gpu|videocard/i.test(nameValue)) return "gpu";
+  if (/процессор|cpu|ryzen|intel core/i.test(nameValue)) return "cpu";
+  if (/часы|smartwatch|watch|apple watch|galaxy watch|amazfit/i.test(nameValue)) return "smartwatch";
+  if (/камера|фотоаппарат|camera|photo|canon|nikon|sony a7|fujifilm/i.test(nameValue)) return "camera";
+  if (/планшет|tablet|ipad|galaxy tab|xiaomi pad/i.test(nameValue)) return "tablet";
+
+  const value = rawCategory.trim().toLowerCase();
   switch (value) {
     case "smartphone":
       return "smartphone";
@@ -349,8 +361,10 @@ const normalizeBackendCategory = (rawCategory: string, name: string): Product["c
       return "cpu";
     case "tv":
       return "tv";
+    case "accessories":
+      return "accessories";
     default:
-      return inferCategory(rawCategory || name);
+      return inferCategory(name);
   }
 };
 
@@ -473,6 +487,29 @@ const detectCategoryIntent = (query: string): CategoryIntent | null => {
     ])
   ) {
     return { category: "camera", backendCategoryQuery: "camera" };
+  }
+  if (
+    isCategoryQuery(normalized, [
+      "\u0430\u043a\u0441\u0435\u0441\u0441\u0443\u0430\u0440",
+      "\u0430\u043a\u0441\u0435\u0441\u0441\u0443\u0430\u0440\u044b",
+      "\u0447\u0435\u0445\u043e\u043b",
+      "\u0447\u0435\u0445\u043b\u044b",
+      "\u0441\u0442\u0435\u043a\u043b\u043e",
+      "\u0437\u0430\u0449\u0438\u0442\u043d\u043e\u0435 \u0441\u0442\u0435\u043a\u043b\u043e",
+      "\u0437\u0430\u0440\u044f\u0434\u043a\u0430",
+      "\u0437\u0430\u0440\u044f\u0434\u043d\u043e\u0435 \u0443\u0441\u0442\u0440\u043e\u0439\u0441\u0442\u0432\u043e",
+      "\u043a\u0430\u0431\u0435\u043b\u044c",
+      "\u043a\u0430\u0431\u0435\u043b\u0438",
+      "\u043d\u0430\u0443\u0448\u043d\u0438\u043a\u0438 \u0430\u043a\u0441\u0435\u0441\u0441\u0443\u0430\u0440",
+      "accessories",
+      "accessory",
+      "case",
+      "cases",
+      "charger",
+      "cable",
+    ])
+  ) {
+    return { category: "accessories", backendCategoryQuery: "accessories" };
   }
 
   return null;

@@ -1,4 +1,4 @@
-export type Category = 'laptop' | 'smartphone' | 'gpu' | 'cpu' | 'headphones' | 'smartwatch' | 'camera' | 'tablet' | 'tv';
+export type Category = 'laptop' | 'smartphone' | 'gpu' | 'cpu' | 'headphones' | 'smartwatch' | 'camera' | 'tablet' | 'tv' | 'accessories';
 
 export interface PricePoint {
   date: string;
